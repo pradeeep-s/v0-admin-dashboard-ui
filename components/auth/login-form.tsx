@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function LoginForm() {
   const router = useRouter()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -23,13 +23,13 @@ export function LoginForm() {
     setLoading(true)
 
     try {
-      if (!username || !password) {
-        setError('Please enter both username and password')
+      if (!email || !password) {
+        setError('Please enter both email and password')
         return
       }
 
       const user = await api.post<User>('/api/login', {
-        username,
+        email,
         password,
       })
 
@@ -70,15 +70,15 @@ export function LoginForm() {
             )}
 
             <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium">
-                Username
+              <label htmlFor="email" className="text-sm font-medium">
+                Email Address
               </label>
               <Input
-                id="username"
-                type="text"
+                id="email"
+                type="email"
                 placeholder="admin@pacs.com"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 className="border-border"
               />
