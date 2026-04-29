@@ -18,9 +18,13 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 /**
- * Authenticate user with email and password
- * First tries Supabase Auth, then falls back to stored credentials in users table
- * If user doesn't exist in either system, creates them
+ * Authenticate user with email and password using users table only
+ * Steps:
+ * 1. Look up user by email in users table
+ * 2. Verify password against password_hash using bcrypt
+ * 3. Check if user is active
+ * 4. If user doesn't exist, create new user with provided credentials
+ * 5. Return user with role information from users table
  */
 export async function authenticateUser(
   email: string,
@@ -29,27 +33,9 @@ export async function authenticateUser(
   try {
     const supabase = await createClient()
 
-    // Step 1: Try Supabase Auth
-    console.log('[v0] Attempting Supabase Auth for:', email)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    console.log('[v0] Authenticating user with email:', email)
 
-    if (!authError && authData.user) {
-      console.log('[v0] Supabase Auth succeeded for:', email)
-      // Get or create user record
-      const userRecord = await getOrCreateUserRecord(supabase, authData.user.id, email)
-      return {
-        user: userRecord,
-        error: null,
-        isNewUser: false,
-      }
-    }
-
-    console.log('[v0] Supabase Auth failed, trying fallback credentials:', authError?.message)
-
-    // Step 2: Try fallback authentication (stored credentials in users table)
+    // Step 1: Try to find user by email in users table
     const { data: storedUser, error: fetchError } = await supabase
       .from('users')
       .select('id, email, password_hash, role, is_active, username')
@@ -57,11 +43,13 @@ export async function authenticateUser(
       .single()
 
     if (!fetchError && storedUser && storedUser.password_hash) {
-      console.log('[v0] Found stored user credentials for:', email)
+      console.log('[v0] Found user in users table for:', email)
+      
+      // Step 2: Verify password using bcrypt
       const passwordMatch = await verifyPassword(password, storedUser.password_hash)
 
       if (passwordMatch) {
-        console.log('[v0] Password verification succeeded for:', email)
+        console.log('[v0] Password verification succeeded for:', email, 'Role:', storedUser.role)
         return {
           user: {
             id: storedUser.id,
@@ -76,24 +64,28 @@ export async function authenticateUser(
       }
 
       console.log('[v0] Password verification failed for:', email)
+      return {
+        user: null,
+        error: 'Invalid email or password',
+        isNewUser: false,
+      }
     }
 
-    // Step 3: User doesn't exist anywhere - create new user with stored credentials
+    // Step 3: User not found - create new user with credentials
     console.log('[v0] User not found, creating new user with email:', email)
     const passwordHash = await hashPassword(password)
 
-    // Generate a unique username from email
-    const username = email.split('@')[0] + Math.random().toString(36).substring(7)
+    // Generate username from email
+    const username = email.split('@')[0]
 
-    // Create user in users table without Supabase Auth ID
-    // Use a temporary UUID for new manual users
-    const tempUserId = crypto.randomUUID ? crypto.randomUUID() : generateUUID()
+    // Create new user ID
+    const newUserId = generateUUID()
 
     const { data: newUser, error: createError } = await supabase
       .from('users')
       .insert([
         {
-          id: tempUserId,
+          id: newUserId,
           email,
           username,
           password_hash: passwordHash,
@@ -108,12 +100,12 @@ export async function authenticateUser(
       console.error('[v0] Error creating new user:', createError)
       return {
         user: null,
-        error: 'Failed to create user',
+        error: 'Failed to create user account',
         isNewUser: false,
       }
     }
 
-    console.log('[v0] New user created:', email)
+    console.log('[v0] New user created successfully:', email, 'Role: Operator')
     return {
       user: {
         id: newUser.id,
@@ -132,57 +124,6 @@ export async function authenticateUser(
       error: 'Authentication failed',
       isNewUser: false,
     }
-  }
-}
-
-/**
- * Get existing user record or create one from Supabase Auth
- */
-async function getOrCreateUserRecord(
-  supabase: any,
-  userId: string,
-  email: string
-): Promise<User> {
-  // Try to get existing user
-  const { data: existingUser } = await supabase
-    .from('users')
-    .select('id, username, email, role, is_active')
-    .eq('id', userId)
-    .single()
-
-  if (existingUser) {
-    return {
-      id: existingUser.id,
-      username: existingUser.username || email,
-      email: existingUser.email,
-      role: existingUser.role,
-      isActive: existingUser.is_active,
-    }
-  }
-
-  // Create new user record from Supabase Auth user
-  const username = email.split('@')[0] + Math.random().toString(36).substring(7)
-
-  const { data: newUser } = await supabase
-    .from('users')
-    .insert([
-      {
-        id: userId,
-        email,
-        username,
-        role: 'Operator', // Default to Operator
-        is_active: true,
-      },
-    ])
-    .select('id, username, email, role, is_active')
-    .single()
-
-  return {
-    id: newUser.id,
-    username: newUser.username,
-    email: newUser.email,
-    role: newUser.role,
-    isActive: newUser.is_active,
   }
 }
 

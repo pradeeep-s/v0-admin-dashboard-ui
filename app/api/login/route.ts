@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[v0] Login attempt for email:', email)
 
-    // Use unified authentication (Supabase Auth + Fallback credentials)
+    // Authenticate user using users table (email + password_hash with bcrypt verification)
     const { user: userData, error: authError, isNewUser } = await authenticateUser(email, password)
 
     if (authError || !userData) {

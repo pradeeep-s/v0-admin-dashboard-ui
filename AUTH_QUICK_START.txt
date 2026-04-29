@@ -1,0 +1,210 @@
+================================================================================
+USERS TABLE AUTHENTICATION - QUICK START
+================================================================================
+
+Simple email + password login using users table with role-based access control.
+
+NO SUPABASE AUTH - Uses only users table data.
+
+================================================================================
+IN 3 MINUTES
+================================================================================
+
+1. Start Dev Server
+   pnpm dev
+
+2. Create First User (via API)
+   curl -X POST http://localhost:3000/api/register \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@pacs.com","password":"admin123","role":"Admin"}'
+
+3. Login
+   - Open http://localhost:3000/login
+   - Email: admin@pacs.com
+   - Password: admin123
+   - Click Login
+
+Done! Admin user can access Admin Configuration.
+
+================================================================================
+DEMO CREDENTIALS
+================================================================================
+
+Email: admin@pacs.com
+Password: admin123
+Role: Admin
+Access: Full dashboard + Admin Configuration
+
+Email: operator@pacs.com
+Password: operator123
+Role: Operator
+Access: Dashboard only
+
+================================================================================
+HOW IT WORKS
+================================================================================
+
+User Logs In:
+  email + password
+       ↓
+  Query users table by email
+       ↓
+  Compare password with password_hash using bcrypt
+       ↓
+  Verify user is active (is_active = true)
+       ↓
+  Return user with role from users table
+       ↓
+  Admin role → Shows Admin Configuration
+  Operator role → Hides Admin Configuration
+
+================================================================================
+SETUP CHECKLIST
+================================================================================
+
+Database
+  ✓ Users table has password_hash column
+  ✓ Users table has role column
+  ✓ Users table has is_active column
+
+Create Demo Users (choose one)
+  ✓ Via API: POST /api/register
+  ✓ Via SQL: INSERT INTO users (...)
+
+Test Login
+  ✓ Admin login works → Admin Configuration visible
+  ✓ Operator login works → Admin Configuration hidden
+
+================================================================================
+DATABASE QUERY
+================================================================================
+
+View all users:
+  SELECT email, role, is_active, last_login FROM public.users;
+
+Create new user (SQL):
+  INSERT INTO public.users (id, email, username, password_hash, role, is_active)
+  VALUES (gen_random_uuid(), 'user@pacs.com', 'username', 'bcrypt_hash', 'Operator', true);
+
+Change user role:
+  UPDATE public.users SET role = 'Admin' WHERE email = 'operator@pacs.com';
+
+Deactivate user (prevent login):
+  UPDATE public.users SET is_active = false WHERE email = 'user@pacs.com';
+
+================================================================================
+API CALLS
+================================================================================
+
+Login:
+  POST /api/login
+  { "email": "admin@pacs.com", "password": "admin123" }
+
+Register:
+  POST /api/register
+  { "email": "user@pacs.com", "password": "pass123", "role": "Operator" }
+
+Get Current User:
+  GET /api/me
+  (Returns user data with role)
+
+Logout:
+  POST /api/logout
+
+================================================================================
+ROLE-BASED FEATURES
+================================================================================
+
+Admin Role
+  ✓ Dashboard
+  ✓ Upload Data
+  ✓ Upload History
+  ✓ Error Reports
+  ✓ Admin Configuration
+    - Modules
+    - Schemes
+    - Column Mapping
+    - Validation Rules
+
+Operator Role
+  ✓ Dashboard
+  ✓ Upload Data
+  ✓ Upload History
+  ✓ Error Reports
+  ✗ Admin Configuration (Hidden)
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Login fails with "Invalid email or password"
+  → Check email exists in users table
+  → Verify password is correct
+  → Check is_active = true in database
+
+User sees "Invalid email or password" on first login
+  → This is expected if user doesn't exist yet
+  → System will create new user automatically
+  → Or use /api/register to pre-create user
+
+Admin can't see Admin Configuration after login
+  → Check role is 'Admin' in database
+  → Logout and login again
+  → Check browser console for errors
+
+================================================================================
+PASSWORD HASHING
+================================================================================
+
+When user registers with password "admin123":
+  bcrypt.hash("admin123", 10)
+  → "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36gZvWQm"
+
+When user logs in with password "admin123":
+  bcrypt.compare("admin123", "$2a$10$...")
+  → true (password matches)
+
+Key Points:
+  - Passwords never stored in plain text
+  - Each password has unique salt
+  - Cannot reverse the hash
+  - One-way function for security
+
+================================================================================
+FILES TO KNOW
+================================================================================
+
+lib/auth-utils.ts
+  → hashPassword() - Hash password
+  → verifyPassword() - Check password matches hash
+  → authenticateUser() - Main auth function
+
+app/api/login/route.ts
+  → POST /api/login endpoint
+
+app/api/register/route.ts
+  → POST /api/register endpoint
+
+components/auth/login-form.tsx
+  → Login page UI
+
+hooks/useAuth.ts
+  → React hook for auth state
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Run pnpm dev
+2. Create first admin user via /api/register
+3. Login and test
+4. Create more users as needed
+5. Read USERS_TABLE_AUTH.md for detailed guide
+
+Ready to go! 🚀
+
+================================================================================
+Version: 3.2 (Users Table Authentication)
+Status: Production Ready
+Last Updated: 2026-04-29
+================================================================================

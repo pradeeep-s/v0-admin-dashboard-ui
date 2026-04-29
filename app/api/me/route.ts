@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
+    // Get authenticated user from session (middleware handles this)
     const {
       data: { user: authUser },
       error: authError,
@@ -14,17 +15,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Unauthorized',
+          message: 'Unauthorized - please log in',
         },
         { status: 401 }
       )
     }
 
-    // Get user details from database
+    // Get user details from users table (includes role)
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id, username, email, role, is_active, last_login')
-      .eq('id', authUser.id)
+      .eq('email', authUser.email)
       .single()
 
     if (userError || !userData) {
@@ -32,9 +33,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: 'User not found',
+          message: 'User data not found',
         },
         { status: 404 }
+      )
+    }
+
+    if (!userData.is_active) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'User account is inactive',
+        },
+        { status: 403 }
       )
     }
 
