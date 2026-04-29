@@ -1,11 +1,16 @@
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { mockUsers, sessions } from '@/lib/mock-data'
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = request.cookies.get('sessionId')?.value
+    const supabase = await createClient()
 
-    if (!sessionId) {
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !authUser) {
       return NextResponse.json(
         {
           success: false,
@@ -15,34 +20,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const session = sessions.get(sessionId)
+    // Get user details from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, username, email, role, is_active, last_login')
+      .eq('id', authUser.id)
+      .single()
 
-    if (!session) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid session',
-        },
-        { status: 401 }
-      )
-    }
-
-    // Find user by id
-    let user = null
-    for (const userData of Object.values(mockUsers)) {
-      if (userData.id === session.userId) {
-        user = userData
-        break
-      }
-    }
-
-    if (!user) {
+    if (userError || !userData) {
+      console.error('[v0] User fetch error:', userError)
       return NextResponse.json(
         {
           success: false,
           message: 'User not found',
         },
-        { status: 401 }
+        { status: 404 }
       )
     }
 
@@ -50,14 +42,16 @@ export async function GET(request: NextRequest) {
       success: true,
       message: 'User fetched successfully',
       data: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
+        id: userData.id,
+        username: userData.username,
+        email: userData.email,
+        role: userData.role,
+        isActive: userData.is_active,
+        lastLogin: userData.last_login,
       },
     })
   } catch (error) {
+    console.error('[v0] Me API error:', error)
     return NextResponse.json(
       {
         success: false,

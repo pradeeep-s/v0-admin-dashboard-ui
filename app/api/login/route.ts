@@ -1,24 +1,31 @@
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { mockUsers, sessions } from '@/lib/mock-data'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { username, password } = body
+    const { email, password } = body
 
-    if (!username || !password) {
+    if (!email || !password) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Username and password are required',
+          message: 'Email and password are required',
         },
         { status: 400 }
       )
     }
 
-    const user = mockUsers[username]
+    const supabase = await createClient()
 
-    if (!user || user.password !== password) {
+    // Sign in with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (authError || !authData.user) {
+      console.error('[v0] Auth error:', authError)
       return NextResponse.json(
         {
           success: false,
@@ -28,7 +35,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!user.isActive) {
+    // Get user details from database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, username, email, role, is_active')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (userError || !userData) {
+      console.error('[v0] User fetch error:', userError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'User data not found',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!userData.is_active) {
       return NextResponse.json(
         {
           success: false,
@@ -38,38 +63,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create session
-    const sessionId = Math.random().toString(36).substring(2, 15)
-    sessions.set(sessionId, {
-      userId: user.id,
-      createdAt: new Date(),
-    })
+    // Update last login
+    await supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', userData.id)
 
-    // Set secure cookie
     const response = NextResponse.json(
       {
         success: true,
         message: 'Login successful',
         data: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive,
+          id: userData.id,
+          username: userData.username,
+          email: userData.email,
+          role: userData.role,
+          isActive: userData.is_active,
         },
       },
       { status: 200 }
     )
 
-    response.cookies.set('sessionId', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    })
-
     return response
   } catch (error) {
+    console.error('[v0] Login API error:', error)
     return NextResponse.json(
       {
         success: false,

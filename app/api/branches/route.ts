@@ -1,12 +1,33 @@
-import { mockBranches } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  try {
+    const supabase = await createClient()
 
-  return NextResponse.json({
-    success: true,
-    data: mockBranches,
-  })
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, name, code, location, is_active')
+      .eq('is_active', true)
+      .order('name')
+
+    if (error) {
+      console.error('[v0] Branches query error:', error)
+      return NextResponse.json(
+        { success: false, message: error.message, data: [] },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: data || [],
+    })
+  } catch (error) {
+    console.error('[v0] Branches API error:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error', data: [] },
+      { status: 500 }
+    )
+  }
 }

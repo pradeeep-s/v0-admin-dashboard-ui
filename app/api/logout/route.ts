@@ -1,12 +1,15 @@
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { sessions } from '@/lib/mock-data'
 
 export async function POST(request: NextRequest) {
   try {
-    const sessionId = request.cookies.get('sessionId')?.value
+    const supabase = await createClient()
 
-    if (sessionId) {
-      sessions.delete(sessionId)
+    // Sign out from Supabase
+    const { error } = await supabase.auth.signOut()
+
+    if (error) {
+      console.error('[v0] Logout error:', error)
     }
 
     const response = NextResponse.json({
@@ -14,10 +17,9 @@ export async function POST(request: NextRequest) {
       message: 'Logout successful',
     })
 
-    response.cookies.delete('sessionId')
-
     return response
   } catch (error) {
+    console.error('[v0] Logout API error:', error)
     return NextResponse.json(
       {
         success: false,

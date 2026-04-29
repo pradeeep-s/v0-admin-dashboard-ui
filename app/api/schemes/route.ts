@@ -1,37 +1,82 @@
-import { mockSchemes } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  try {
+    const supabase = await createClient()
+    const { searchParams } = new URL(request.url)
+    const moduleId = searchParams.get('moduleId')
 
-  const { searchParams } = new URL(request.url)
-  const moduleId = searchParams.get('moduleId')
+    let query = supabase
+      .from('schemes')
+      .select('id, module_id, name, code, description, is_active')
+      .eq('is_active', true)
+      .order('name')
 
-  let data = mockSchemes
+    if (moduleId) {
+      query = query.eq('module_id', moduleId)
+    }
 
-  if (moduleId) {
-    data = mockSchemes.filter((scheme) => scheme.moduleId === moduleId)
+    const { data, error } = await query
+
+    if (error) {
+      console.error('[v0] Schemes query error:', error)
+      return NextResponse.json(
+        { success: false, message: error.message, data: [] },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: data || [],
+    })
+  } catch (error) {
+    console.error('[v0] Schemes API error:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error', data: [] },
+      { status: 500 }
+    )
   }
-
-  return NextResponse.json({
-    success: true,
-    data,
-  })
 }
 
 export async function POST(request: Request) {
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  try {
+    const supabase = await createClient()
+    const body = await request.json()
 
-  const body = await request.json()
+    const { moduleId, name, code, description } = body
 
-  const newScheme = {
-    id: `SCH-${Date.now()}`,
-    ...body,
-    isActive: true,
+    if (!moduleId || !name || !code) {
+      return NextResponse.json(
+        { success: false, message: 'Module ID, name, and code are required' },
+        { status: 400 }
+      )
+    }
+
+    const { data, error } = await supabase
+      .from('schemes')
+      .insert([{ module_id: moduleId, name, code, description, is_active: true }])
+      .select()
+
+    if (error) {
+      console.error('[v0] Scheme creation error:', error)
+      return NextResponse.json(
+        { success: false, message: error.message },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Scheme created successfully',
+      data: data?.[0],
+    })
+  } catch (error) {
+    console.error('[v0] Scheme API error:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    )
   }
-
-  return NextResponse.json({
-    success: true,
-    data: newScheme,
-  })
 }
