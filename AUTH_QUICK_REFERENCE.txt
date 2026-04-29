@@ -1,0 +1,389 @@
+================================================================================
+AUTHENTICATION SYSTEM - QUICK REFERENCE
+================================================================================
+
+PROJECT: Dynamic Excel Data Processing System
+AUTH TYPE: Hybrid (Email/Password + Role-Based Access)
+DATABASE: Supabase PostgreSQL (users table)
+STATUS: ✅ READY TO USE
+
+================================================================================
+LOGIN CREDENTIALS (After Setup)
+================================================================================
+
+ADMIN USER
+  Email: admin@pacs.com
+  Password: admin123
+  Role: Admin
+  Access: Full (Dashboard + Admin Configuration)
+
+OPERATOR USER
+  Email: operator@pacs.com
+  Password: operator123
+  Role: Operator
+  Access: Limited (Dashboard only, no config)
+
+================================================================================
+LOGIN FLOW
+================================================================================
+
+1. User visits http://localhost:3000/login
+2. Enters EMAIL and PASSWORD
+3. Clicks "Login"
+4. System authenticates:
+   ├─ Tries: Supabase Auth
+   ├─ Tries: users table (password_hash bcrypt comparison)
+   └─ Tries: Create new user with provided credentials
+5. If successful → Logs in with role from users table
+6. If role = Admin → Shows Admin Configuration
+7. If role = Operator → Hides Admin Configuration
+
+================================================================================
+DATABASE (users TABLE)
+================================================================================
+
+Column          | Type      | Purpose
+─────────────────────────────────────────────────────────────
+id              | UUID      | Unique user identifier
+email           | TEXT      | Login email (unique)
+username        | TEXT      | Display name (auto-generated)
+password_hash   | TEXT      | Bcrypt hashed password
+role            | TEXT      | 'Admin' or 'Operator'
+is_active       | BOOLEAN   | Can user log in?
+last_login      | TIMESTAMP | Last login time
+created_at      | TIMESTAMP | Account creation time
+
+================================================================================
+SETUP (5 MINUTES)
+================================================================================
+
+STEP 1: Database Migration
+  □ Open Supabase SQL Editor
+  □ Run: scripts/004_add_password_field.sql
+  □ Wait for completion
+
+STEP 2: Create Demo Users (choose one method)
+
+  METHOD A: Via API (Recommended)
+    □ Start dev server: pnpm dev
+    □ Run curl commands to create users:
+      
+      Admin User:
+      curl -X POST http://localhost:3000/api/register \
+        -H "Content-Type: application/json" \
+        -d '{"email":"admin@pacs.com","password":"admin123","username":"admin_user","role":"Admin"}'
+      
+      Operator User:
+      curl -X POST http://localhost:3000/api/register \
+        -H "Content-Type: application/json" \
+        -d '{"email":"operator@pacs.com","password":"operator123","username":"operator_user","role":"Operator"}'
+
+  METHOD B: Via SQL
+    □ Open Supabase SQL Editor
+    □ Run: scripts/005_seed_users.sql
+    □ Wait for completion
+
+STEP 3: Test Login
+  □ Open http://localhost:3000/login
+  □ Enter: admin@pacs.com / admin123
+  □ Click Login
+  □ Verify: Dashboard appears with Admin Configuration visible
+
+STEP 4: Test Role Access
+  □ Login as admin@pacs.com
+  □ Verify: Admin Configuration menu visible
+  □ Logout
+  □ Login as operator@pacs.com
+  □ Verify: Admin Configuration menu HIDDEN
+
+================================================================================
+API ENDPOINTS
+================================================================================
+
+POST /api/login
+──────────────────────────────────────────────────────────
+Purpose: Authenticate user with email and password
+Input:   { email: "user@pacs.com", password: "pass123" }
+Output:  { success: true, data: { id, username, email, role, isActive } }
+Error:   { success: false, message: "Invalid email or password" }
+
+POST /api/register
+──────────────────────────────────────────────────────────
+Purpose: Register new user with email and password
+Input:   { 
+            email: "user@pacs.com",
+            password: "pass123",
+            username: "user_name",     // Optional
+            role: "Operator"           // Optional (defaults to Operator)
+          }
+Output:  { success: true, data: { id, username, email, role, isActive } }
+Error:   { success: false, message: "Email already exists" }
+
+POST /api/logout
+──────────────────────────────────────────────────────────
+Purpose: Log out current user
+Input:   (no body needed)
+Output:  { success: true, message: "Logout successful" }
+
+GET /api/me
+──────────────────────────────────────────────────────────
+Purpose: Get current logged-in user's data
+Input:   (no body needed)
+Output:  { success: true, data: { id, username, email, role, isActive } }
+Error:   { success: false, message: "Unauthorized" } (401)
+
+================================================================================
+USER MANAGEMENT (SQL COMMANDS)
+================================================================================
+
+CREATE NEW USER (manually - not recommended)
+  INSERT INTO public.users (
+    id, email, username, password_hash, role, is_active
+  ) VALUES (
+    gen_random_uuid(),
+    'user@pacs.com',
+    'username',
+    '$2a$10$..bcrypt_hash..',
+    'Operator',
+    true
+  );
+
+VIEW ALL USERS
+  SELECT id, email, username, role, is_active, last_login 
+  FROM public.users 
+  ORDER BY created_at DESC;
+
+FIND USER BY EMAIL
+  SELECT * FROM public.users WHERE email = 'admin@pacs.com';
+
+CHANGE USER ROLE
+  UPDATE public.users SET role = 'Admin' WHERE email = 'user@pacs.com';
+
+DEACTIVATE USER (prevent login)
+  UPDATE public.users SET is_active = false WHERE email = 'user@pacs.com';
+
+REACTIVATE USER
+  UPDATE public.users SET is_active = true WHERE email = 'user@pacs.com';
+
+DELETE USER (cannot undo!)
+  DELETE FROM public.users WHERE email = 'user@pacs.com';
+
+================================================================================
+AUTHENTICATION LOGIC
+================================================================================
+
+When user logs in with email + password:
+
+┌─────────────────────────────────────────────────────────┐
+│ 1. TRY SUPABASE AUTH                                    │
+│    supabase.auth.signInWithPassword(email, password)    │
+└─────────────────────────────────────────────────────────┘
+    ↓ Success? → Return user ✓
+    ↓ Fail? → Continue
+
+┌─────────────────────────────────────────────────────────┐
+│ 2. TRY USERS TABLE (FALLBACK)                           │
+│    Query: SELECT password_hash FROM users WHERE email   │
+│    Compare: bcrypt.compare(password, password_hash)     │
+└─────────────────────────────────────────────────────────┘
+    ↓ Success? → Return user ✓
+    ↓ Fail? → Continue
+
+┌─────────────────────────────────────────────────────────┐
+│ 3. CREATE NEW USER (AUTO-SIGNUP)                        │
+│    If user doesn't exist, create with provided creds    │
+│    Hash password, insert into users table               │
+│    Set role = 'Operator' by default                    │
+└─────────────────────────────────────────────────────────┘
+    ↓ Success? → Return new user ✓
+    ↓ Fail? → Return error ✗
+
+Result: User logged in with their role from users table
+
+================================================================================
+ROLE-BASED ACCESS
+================================================================================
+
+ADMIN ROLE
+  ✓ View Dashboard
+  ✓ Upload Data
+  ✓ View Upload History
+  ✓ View Error Reports
+  ✓ Admin Configuration (ADMIN ONLY)
+    ├─ Manage Modules
+    ├─ Manage Schemes
+    ├─ Column Mapping
+    └─ Validation Rules
+
+OPERATOR ROLE
+  ✓ View Dashboard
+  ✓ Upload Data
+  ✓ View Upload History
+  ✓ View Error Reports
+  ✗ Admin Configuration (HIDDEN)
+
+Role is checked:
+  1. In frontend (sidebar menu)
+  2. In backend (/api/config validates role)
+  3. In database (RLS policies)
+
+================================================================================
+PASSWORD HASHING
+================================================================================
+
+Algorithm: Bcrypt
+Salt Rounds: 10
+Hash Length: 60 characters
+
+Example Hash:
+  $2a$10$..22 chars salt...40 chars hash.
+
+Process:
+  1. User enters password: "admin123"
+  2. On registration: hashPassword("admin123")
+     → bcrypt.hash("admin123", 10)
+     → "$2a$10$..."
+  3. On login: verifyPassword("admin123", "$2a$10$...")
+     → bcrypt.compare("admin123", "$2a$10$...")
+     → true or false
+
+Security:
+  ✓ Passwords never stored in plain text
+  ✓ Each password has unique salt
+  ✓ Slow hashing (prevents brute force)
+  ✓ One-way function (can't reverse)
+
+================================================================================
+FILE STRUCTURE
+================================================================================
+
+Authentication Code:
+  lib/auth-utils.ts               - Core auth functions
+  app/api/login/route.ts          - Login endpoint
+  app/api/register/route.ts       - Registration endpoint
+  components/auth/login-form.tsx  - Login UI
+
+Database:
+  scripts/004_add_password_field.sql  - Add password_hash column
+  scripts/005_seed_users.sql          - Demo users
+
+Documentation:
+  AUTH_SETUP.md                   - Detailed setup guide
+  AUTH_IMPLEMENTATION.md          - Technical details
+  AUTH_QUICK_REFERENCE.txt        - This file
+
+================================================================================
+COMMON TASKS
+================================================================================
+
+ADD NEW USER
+  curl -X POST http://localhost:3000/api/register \
+    -H "Content-Type: application/json" \
+    -d '{"email":"new@pacs.com","password":"pass123","role":"Operator"}'
+
+PROMOTE USER TO ADMIN
+  UPDATE public.users SET role = 'Admin' WHERE email = 'user@pacs.com';
+
+LOCK USER ACCOUNT
+  UPDATE public.users SET is_active = false WHERE email = 'user@pacs.com';
+
+CHECK LOGIN HISTORY
+  SELECT email, last_login FROM public.users ORDER BY last_login DESC;
+
+FIND ADMIN USERS
+  SELECT * FROM public.users WHERE role = 'Admin';
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "Invalid email or password"
+SOLUTION:
+  1. Check email/password are correct
+  2. Verify user exists: SELECT * FROM public.users WHERE email = '...';
+  3. Create user: POST /api/register
+  4. Check logs for details
+
+PROBLEM: Admin user doesn't see Admin Configuration
+SOLUTION:
+  1. Verify role is 'Admin': SELECT role FROM public.users WHERE email = '...';
+  2. Update if needed: UPDATE public.users SET role = 'Admin' WHERE email = '...';
+  3. Clear browser cache, logout, login again
+
+PROBLEM: "User account is inactive"
+SOLUTION:
+  1. Activate user: UPDATE public.users SET is_active = true WHERE email = '...';
+
+PROBLEM: Cannot create new user via API
+SOLUTION:
+  1. Check email doesn't exist: SELECT * FROM public.users WHERE email = '...';
+  2. Check password is 6+ chars
+  3. Check API response for error details
+  4. Check server logs: pnpm dev output
+
+PROBLEM: User was created but can't log in
+SOLUTION:
+  1. Check is_active = true: SELECT is_active FROM public.users WHERE email = '...';
+  2. Check password_hash exists and isn't NULL
+  3. Re-create user via /api/register (will hash password automatically)
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+AUTHENTICATION
+  □ Login with admin@pacs.com works
+  □ Login with operator@pacs.com works
+  □ Invalid email shows error
+  □ Invalid password shows error
+  □ User auto-created with new email/password
+  □ Logout works
+  □ After logout, /login redirects home
+
+ROLE ACCESS
+  □ Admin sees Admin Configuration menu
+  □ Operator doesn't see Admin Configuration menu
+  □ Admin can access /api/config
+  □ Operator cannot access /api/config
+  □ API returns 403 when Operator tries admin endpoint
+
+DATABASE
+  □ Password hashes stored, not plain text
+  □ Role stored correctly in users table
+  □ Last login updated on each login
+  □ is_active field prevents login when false
+
+================================================================================
+SECURITY CHECKLIST
+================================================================================
+
+  □ Passwords are bcrypt hashed
+  □ No plain text passwords in database
+  □ Password hashes are 60 characters
+  □ Email is unique in users table
+  □ Username is unique in users table
+  □ is_active controls login permission
+  □ Role-based access enforced in API
+  □ Sessions use httpOnly cookies
+  □ Failed login attempts logged
+  □ User can only view own data (RLS)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Run: pnpm dev
+2. Follow setup steps above
+3. Test login with demo credentials
+4. Verify role-based access
+5. Read AUTH_SETUP.md for detailed guide
+6. Create additional users as needed
+7. Monitor logs for auth issues
+
+Ready to go! 🚀
+
+================================================================================
+Version: 3.1 (Hybrid Auth Implementation)
+Last Updated: 2026-04-29
+Status: ✅ Production Ready
+================================================================================

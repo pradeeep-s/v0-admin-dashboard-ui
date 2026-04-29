@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { authenticateUser } from '@/lib/auth-utils'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -16,44 +17,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    console.log('[v0] Login attempt for email:', email)
 
-    // Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    // Use unified authentication (Supabase Auth + Fallback credentials)
+    const { user: userData, error: authError, isNewUser } = await authenticateUser(email, password)
 
-    if (authError || !authData.user) {
-      console.error('[v0] Auth error:', authError)
+    if (authError || !userData) {
+      console.error('[v0] Authentication failed:', authError)
       return NextResponse.json(
         {
           success: false,
-          message: 'Invalid credentials',
+          message: 'Invalid email or password',
         },
         { status: 401 }
       )
     }
 
-    // Get user details from database
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, username, email, role, is_active')
-      .eq('id', authData.user.id)
-      .single()
-
-    if (userError || !userData) {
-      console.error('[v0] User fetch error:', userError)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'User data not found',
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!userData.is_active) {
+    if (!userData.isActive) {
       return NextResponse.json(
         {
           success: false,
@@ -64,21 +44,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Update last login
+    const supabase = await createClient()
     await supabase
       .from('users')
       .update({ last_login: new Date().toISOString() })
       .eq('id', userData.id)
 
+    console.log('[v0] Login successful for email:', email, 'New user:', isNewUser)
+
     const response = NextResponse.json(
       {
         success: true,
-        message: 'Login successful',
+        message: isNewUser ? 'Account created and logged in' : 'Login successful',
         data: {
           id: userData.id,
           username: userData.username,
           email: userData.email,
           role: userData.role,
-          isActive: userData.is_active,
+          isActive: userData.isActive,
         },
       },
       { status: 200 }
