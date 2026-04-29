@@ -10,8 +10,11 @@ import { ResultCard } from '@/components/common/result-card'
 import { Branch, Module, Scheme, UploadResult } from '@/lib/types'
 import { Spinner } from '@/components/ui/spinner'
 import { Upload } from 'lucide-react'
+import { api, ApiError } from '@/lib/api'
+import { useToast } from '@/components/common/toast-provider'
 
 export default function UploadPage() {
+  const { showToast } = useToast()
   const [branches, setBranches] = useState<Branch[]>([])
   const [modules, setModules] = useState<Module[]>([])
   const [schemes, setSchemes] = useState<Scheme[]>([])
@@ -32,25 +35,23 @@ export default function UploadPage() {
     const loadData = async () => {
       try {
         setLoading(true)
-        const [branchesRes, modulesRes] = await Promise.all([
-          fetch('/api/branches'),
-          fetch('/api/modules'),
+        const [branchesData, modulesData] = await Promise.all([
+          api.get<Branch[]>('/api/branches'),
+          api.get<Module[]>('/api/modules'),
         ])
 
-        const branchesData = await branchesRes.json()
-        const modulesData = await modulesRes.json()
-
-        setBranches(branchesData.data || [])
-        setModules(modulesData.data || [])
+        setBranches(branchesData || [])
+        setModules(modulesData || [])
       } catch (error) {
         console.error('Error loading data:', error)
+        showToast('Failed to load data', 'error')
       } finally {
         setLoading(false)
       }
     }
 
     loadData()
-  }, [])
+  }, [showToast])
 
   // Load schemes when module changes
   useEffect(() => {
@@ -61,22 +62,22 @@ export default function UploadPage() {
       }
 
       try {
-        const res = await fetch(`/api/schemes?moduleId=${formData.moduleId}`)
-        const data = await res.json()
-        setSchemes(data.data || [])
+        const data = await api.get<Scheme[]>(`/api/schemes?moduleId=${formData.moduleId}`)
+        setSchemes(data || [])
       } catch (error) {
         console.error('Error loading schemes:', error)
+        showToast('Failed to load schemes', 'error')
       }
     }
 
     loadSchemes()
-  }, [formData.moduleId])
+  }, [formData.moduleId, showToast])
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file) {
-      alert('Please fill all required fields')
+      showToast('Please fill all required fields', 'error')
       return
     }
 
@@ -102,6 +103,7 @@ export default function UploadPage() {
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: uploadFormData,
+        credentials: 'include',
       })
 
       clearInterval(progressInterval)
@@ -111,14 +113,19 @@ export default function UploadPage() {
 
       if (data.success) {
         setUploadResult(data.data)
+        showToast('File uploaded successfully', 'success')
+      } else {
+        showToast(data.message || 'Upload failed', 'error')
       }
     } catch (error) {
       console.error('Error uploading file:', error)
-      alert('Error uploading file')
+      showToast('Error uploading file', 'error')
     } finally {
       setUploading(false)
     }
   }
+
+  const isUploadDisabled = !formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file
 
   const branchOptions = branches.map((b) => ({
     label: b.name,
@@ -236,7 +243,7 @@ export default function UploadPage() {
                     type="submit"
                     size="lg"
                     className="w-full"
-                    disabled={!formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file}
+                    disabled={isUploadDisabled}
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Upload File

@@ -1,3 +1,20 @@
+// User Types
+export type UserRole = 'Admin' | 'Operator'
+
+export interface User {
+  id: string
+  username: string
+  email: string
+  role: UserRole
+  isActive: boolean
+}
+
+export interface AuthResponse {
+  success: boolean
+  message: string
+  user?: User
+}
+
 // Branch Types
 export interface Branch {
   id: string

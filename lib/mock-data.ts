@@ -6,6 +6,7 @@ import {
   UploadError,
   ColumnMapping,
   ValidationRule,
+  User,
 } from './types'
 
 export const mockBranches: Branch[] = [
@@ -375,3 +376,26 @@ export const mockValidationRules: ValidationRule[] = [
     errorMessage: 'Loan amount cannot exceed 50 lakhs',
   },
 ]
+
+// User/Authentication data
+export const mockUsers: Record<string, User & { password: string }> = {
+  'admin@pacs.com': {
+    id: '1',
+    username: 'admin@pacs.com',
+    email: 'admin@pacs.com',
+    role: 'Admin',
+    isActive: true,
+    password: 'admin123',
+  },
+  'operator@pacs.com': {
+    id: '2',
+    username: 'operator@pacs.com',
+    email: 'operator@pacs.com',
+    role: 'Operator',
+    isActive: true,
+    password: 'operator123',
+  },
+}
+
+// Store sessions in memory (in production, use a real session store)
+export const sessions: Map<string, { userId: string; createdAt: Date }> = new Map()

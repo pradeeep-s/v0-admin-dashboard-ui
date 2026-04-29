@@ -1,6 +1,7 @@
 'use client'
 
-import { Bell, User, ChevronDown } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import { Bell, User, ChevronDown, Loader2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,10 +18,15 @@ interface NavbarProps {
 }
 
 export function Navbar({
-  userName = 'Admin User',
-  userRole = 'Administrator',
-  onLogout,
+  userName: propUserName,
+  userRole: propUserRole,
+  onLogout: propOnLogout,
 }: NavbarProps) {
+  const { user, loading, logout } = useAuth()
+  
+  const displayUserName = user?.username || propUserName || 'User'
+  const displayUserRole = user?.role || propUserRole || 'Operator'
+  const handleLogout = propOnLogout || logout
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border md:left-64 z-30">
       <div className="h-full px-6 flex items-center justify-between">
@@ -43,36 +49,40 @@ export function Navbar({
           </Button>
 
           {/* User Profile Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="flex items-center gap-2 text-foreground hover:bg-muted"
-              >
-                <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-5 h-5 text-primary" />
+          {loading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2 text-foreground hover:bg-muted"
+                >
+                  <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
+                    <User className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="text-left hidden sm:block">
+                    <p className="text-sm font-medium">{displayUserName}</p>
+                    <p className="text-xs text-muted-foreground">{displayUserRole}</p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{displayUserName}</p>
+                  <p className="text-xs text-muted-foreground">{displayUserRole}</p>
                 </div>
-                <div className="text-left hidden sm:block">
-                  <p className="text-sm font-medium">{userName}</p>
-                  <p className="text-xs text-muted-foreground">{userRole}</p>
-                </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{userName}</p>
-                <p className="text-xs text-muted-foreground">{userRole}</p>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile Settings</DropdownMenuItem>
-              <DropdownMenuItem>Change Password</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onLogout} className="text-destructive">
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile Settings</DropdownMenuItem>
+                <DropdownMenuItem>Change Password</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </nav>

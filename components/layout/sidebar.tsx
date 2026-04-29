@@ -7,11 +7,11 @@ import {
   Clock,
   AlertCircle,
   Settings,
-  LogOut,
   Menu,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 
 const menuItems = [
@@ -44,6 +44,16 @@ interface SidebarProps {
 export function Sidebar({ onLogout }: SidebarProps) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const { user } = useAuth()
+
+  // Filter menu items based on role
+  const visibleMenuItems = menuItems.filter(item => {
+    // Admin Configuration only for Admin role
+    if (item.href === '/dashboard/config' && user?.role !== 'Admin') {
+      return false
+    }
+    return true
+  })
 
   const isActive = (href: string) => {
     return pathname.startsWith(href)
@@ -90,7 +100,7 @@ export function Sidebar({ onLogout }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="p-4 space-y-2">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
 
