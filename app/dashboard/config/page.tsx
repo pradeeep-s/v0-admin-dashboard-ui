@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { FormSkeleton } from '@/components/common/loading-skeleton'
 import { ModuleManagement } from '@/components/config/module-management'
 import { SchemeManagement } from '@/components/config/scheme-management'
+import { BranchManagement } from '@/components/config/branch-management'
 import { ColumnMappingComponent } from '@/components/config/column-mapping'
 import { ValidationRulesComponent } from '@/components/config/validation-rules'
 import { Module, Scheme, ColumnMapping, ValidationRule } from '@/lib/types'
@@ -24,6 +25,14 @@ export default function ConfigPage() {
   const [schemes, setSchemes] = useState<Scheme[]>([])
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([])
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([])
+  const [branches, setBranches] = useState<any[]>([])
+  const [newRule, setNewRule] = useState<Partial<ValidationRule>>({
+    columnName: '',
+    ruleType: 'required',
+    ruleValue: '',
+    errorMessage: '',
+  })
+  const [selectedScheme, setSelectedScheme] = useState<string>('')
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -31,9 +40,9 @@ export default function ConfigPage() {
         setLoading(true)
         // In a real app, these would come from API calls
         setModules(mockModules)
-        setSchemes(mockSchemes)
-        setColumnMappings(mockColumnMappings)
-        setValidationRules(mockValidationRules)
+        await loadModules()
+        await loadSchemes()
+        await loadValidationRules()
       } catch (error) {
         console.error('Error loading configuration:', error)
       } finally {
@@ -44,29 +53,229 @@ export default function ConfigPage() {
     loadConfig()
   }, [])
 
-  const handleAddModule = (module: Module) => {
-    setModules([...modules, module])
+  const loadModules = async () => {
+  const res = await fetch('/api/modules')
+  const json = await res.json()
+
+  if (json.success) {
+    setModules(
+      json.data.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        code: m.code,
+        description: m.description,
+        isActive: m.is_active,
+      }))
+    )
+  }
+} 
+const loadSchemes = async () => {
+  const res = await fetch('/api/schemes')
+  const json = await res.json()
+
+  if (json.success) {
+    setSchemes(
+      json.data.map((s: any) => ({
+        id: s.id,
+        moduleId: s.module_id,
+        name: s.name,
+        code: s.code,
+        description: s.description,
+        isActive: s.is_active,
+      }))
+    )
+  }
+}
+
+const loadValidationRules = async () => {
+  try {
+    const res = await fetch('/api/validation-rules')
+
+    const json = await res.json()
+
+    console.log(json)
+
+    if (json.success) {
+      setValidationRules(json.data)
+    }
+  } catch (err) {
+    console.error(err)
+  }
+}
+  useEffect(() => {
+  const loadBranches = async () => {
+    const res = await fetch('/api/branches')
+    const json = await res.json()
+    setBranches(json.data || [])
   }
 
-  const handleEditModule = (module: Module) => {
-    setModules(modules.map((m) => (m.id === module.id ? module : m)))
+  loadBranches()
+}, [])
+const handleAddBranch = async (branch: any) => {
+  const res = await fetch('/api/branches', {
+    method: 'POST',
+    body: JSON.stringify(branch),
+  })
+
+  const json = await res.json()
+
+  if (json.data) {
+    setBranches([json.data, ...branches])
+  }
+}
+const handleEditBranch = async (branch: { id: any }) => {
+  const res = await fetch(`/api/branches/${branch.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(branch),
+  })
+
+  const json = await res.json()
+
+  if (json.data) {
+    setBranches(branches.map(b => b.id === branch.id ? json.data : b))
+  }
+}
+const handleDeleteBranch = async (id: any) => {
+  await fetch(`/api/branches/${id}`, {
+    method: 'DELETE',
+  })
+
+  setBranches(branches.filter(b => b.id !== id))
+}
+
+  const handleAddModule = async (module: any) => {
+  const res = await fetch('/api/modules', {
+    method: 'POST',
+    body: JSON.stringify(module),
+  })
+
+  const json = await res.json()
+
+  if (json.success) {
+    setModules([...modules, {
+      ...json.data,
+      isActive: json.data.is_active,
+    }])
+  }
+}
+
+  const handleEditModule = async (module: any) => {
+  const res = await fetch(`/api/modules/${module.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(module),
+  })
+
+  const json = await res.json()
+
+  if (json.success) {
+    setModules(
+      modules.map((m) =>
+        m.id === module.id ? module : m
+      )
+    )
+  }
+}
+
+const handleDeleteModule = async (id: string) => {
+  await fetch(`/api/modules/${id}`, {
+    method: 'DELETE',
+  })
+
+  await loadModules() // Refresh modules list after deletion
+}
+
+  const handleAddScheme = async (scheme: Scheme) => {
+  const res = await fetch('/api/schemes', {
+    method: 'POST',
+    body: JSON.stringify({
+      moduleId: scheme.moduleId,
+      name: scheme.name,
+      code: scheme.code,
+      description: scheme.description,
+    }),
+  })
+
+  const json = await res.json()
+
+  if (json.success) {
+    setSchemes([...schemes, {
+      ...json.data,
+      moduleId: json.data.module_id,
+      isActive: json.data.is_active,
+    }])
+  }
+}
+
+  const handleEditScheme = async (scheme: Scheme) => {
+  const res = await fetch(`/api/schemes/${scheme.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(scheme),
+  })
+
+  const json = await res.json()
+
+  if (json.success) {
+    setSchemes(
+      schemes.map((s) =>
+        s.id === scheme.id ? { ...scheme } : s
+      )
+    )
+  }
+}
+
+  const handleDeleteScheme = async (id: string) => {
+  await fetch(`/api/schemes/${id}`, {
+    method: 'DELETE',
+  })
+
+  setSchemes(schemes.filter((s) => s.id !== id))
+}
+
+const handleAddRule = async () => {
+  if (!newRule.columnName || !newRule.errorMessage || !selectedScheme) {
+    alert('Please fill all required fields')
+    return
   }
 
-  const handleDeleteModule = (id: string) => {
-    setModules(modules.filter((m) => m.id !== id))
+  const res = await fetch('/api/validation-rules', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      schemeId: selectedScheme,
+      columnName: newRule.columnName,
+      ruleType: newRule.ruleType,
+      ruleValue: newRule.ruleValue,
+      errorMessage: newRule.errorMessage,
+    }),
+  })
+
+  const json = await res.json()
+
+  if (!json.success) {
+    alert(json.message)
+    return
   }
 
-  const handleAddScheme = (scheme: Scheme) => {
-    setSchemes([...schemes, scheme])
-  }
+  setValidationRules([...validationRules, json.data])
 
-  const handleEditScheme = (scheme: Scheme) => {
-    setSchemes(schemes.map((s) => (s.id === scheme.id ? scheme : s)))
-  }
+  setNewRule({
+    columnName: '',
+    ruleType: 'required',
+    ruleValue: '',
+    errorMessage: '',
+  })
+}
+const handleRemoveRule = async (id: string) => {
+  await fetch(`/api/validation-rules/${id}`, {
+    method: 'DELETE',
+  })
 
-  const handleDeleteScheme = (id: string) => {
-    setSchemes(schemes.filter((s) => s.id !== id))
-  }
+  setValidationRules(
+    validationRules.filter((r) => r.id !== id)
+  )
+}
 
   if (loading) {
     return (
@@ -97,7 +306,11 @@ export default function ConfigPage() {
         {/* Tabs */}
         <Tabs defaultValue="modules" className="w-full">
           <Card>
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 rounded-b-none border-b">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 rounded-b-none border-b">
+              <TabsTrigger value="branches" className="gap-2">
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Branches</span>
+              </TabsTrigger>
               <TabsTrigger value="modules" className="gap-2">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Modules</span>
@@ -132,6 +345,23 @@ export default function ConfigPage() {
               onAdd={handleAddModule}
               onEdit={handleEditModule}
               onDelete={handleDeleteModule}
+            />
+          </TabsContent>
+           {/* Branch Management Tab */}
+          <TabsContent value="branches" className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground mb-2">
+                Branch Management
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Create and manage data processing branches
+              </p>
+            </div>
+            <BranchManagement
+              branches={branches}
+              onAdd={handleAddBranch}
+              onEdit={handleEditBranch}
+              onDelete={handleDeleteBranch}
             />
           </TabsContent>
 

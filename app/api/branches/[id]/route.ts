@@ -6,25 +6,26 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET all branches
-export async function GET() {
-  const { data, error } = await supabase
-    .from('branches')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  return NextResponse.json({ data, error })
-}
-
-// CREATE branch
-export async function POST(req: NextRequest) {
+// UPDATE
+export async function PUT(req: NextRequest, { params }: any) {
   const body = await req.json()
 
   const { data, error } = await supabase
     .from('branches')
-    .insert([body])
+    .update(body)
+    .eq('id', params.id)
     .select()
     .single()
 
   return NextResponse.json({ data, error })
+}
+
+// DELETE
+export async function DELETE(req: NextRequest, { params }: any) {
+  const { error } = await supabase
+    .from('branches')
+    .delete()
+    .eq('id', params.id)
+
+  return NextResponse.json({ success: !error })
 }
