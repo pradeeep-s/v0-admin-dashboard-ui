@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { queryOne, query } from '@/lib/db'
+import { createClient } from '@/lib/supabase/server'
 import { User } from '@/lib/types'
 
 /**
@@ -18,7 +18,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 /**
- * Authenticate user with email and password
+ * Authenticate user with email and password using users table only
  * Steps:
  * 1. Look up user by email in users table
  * 2. Verify password against password_hash using bcrypt
@@ -31,22 +31,25 @@ export async function authenticateUser(
   password: string
 ): Promise<{ user: User | null; error: string | null; isNewUser: boolean }> {
   try {
-    console.log('[DB] Authenticating user with email:', email)
+    const supabase = await createClient()
+
+    console.log('[v0] Authenticating user with email:', email)
 
     // Step 1: Try to find user by email in users table
-    const storedUser = await queryOne<any>(
-      'SELECT id, email, password_hash, role, is_active, username FROM public.users WHERE email = $1',
-      [email]
-    )
+    const { data: storedUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id, email, password_hash, role, is_active, username')
+      .eq('email', email)
+      .single()
 
-    if (storedUser && storedUser.password_hash) {
-      console.log('[DB] Found user in users table for:', email)
-
+    if (!fetchError && storedUser && storedUser.password_hash) {
+      console.log('[v0] Found user in users table for:', email)
+      
       // Step 2: Verify password using bcrypt
       const passwordMatch = await verifyPassword(password, storedUser.password_hash)
 
       if (passwordMatch) {
-        console.log('[DB] Password verification succeeded for:', email, 'Role:', storedUser.role)
+        console.log('[v0] Password verification succeeded for:', email, 'Role:', storedUser.role)
         return {
           user: {
             id: storedUser.id,
@@ -60,7 +63,7 @@ export async function authenticateUser(
         }
       }
 
-      console.log('[DB] Password verification failed for:', email)
+      console.log('[v0] Password verification failed for:', email)
       return {
         user: null,
         error: 'Invalid email or password',
@@ -69,7 +72,7 @@ export async function authenticateUser(
     }
 
     // Step 3: User not found - create new user with credentials
-    console.log('[DB] User not found, creating new user with email:', email)
+    console.log('[v0] User not found, creating new user with email:', email)
     const passwordHash = await hashPassword(password)
 
     // Generate username from email
@@ -78,15 +81,23 @@ export async function authenticateUser(
     // Create new user ID
     const newUserId = generateUUID()
 
-    const newUser = await queryOne<any>(
-      `INSERT INTO public.users (id, email, username, password_hash, role, is_active, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING id, email, username, role, is_active`,
-      [newUserId, email, username, passwordHash, 'Operator', true]
-    )
+    const { data: newUser, error: createError } = await supabase
+      .from('users')
+      .insert([
+        {
+          id: newUserId,
+          email,
+          username,
+          password_hash: passwordHash,
+          role: 'Operator', // Default new users to Operator role
+          is_active: true,
+        },
+      ])
+      .select('id, email, username, role, is_active')
+      .single()
 
-    if (!newUser) {
-      console.error('[DB] Error creating new user')
+    if (createError) {
+      console.error('[v0] Error creating new user:', createError)
       return {
         user: null,
         error: 'Failed to create user account',
@@ -94,7 +105,7 @@ export async function authenticateUser(
       }
     }
 
-    console.log('[DB] New user created successfully:', email, 'Role: Operator')
+    console.log('[v0] New user created successfully:', email, 'Role: Operator')
     return {
       user: {
         id: newUser.id,
@@ -107,7 +118,7 @@ export async function authenticateUser(
       isNewUser: true,
     }
   } catch (error) {
-    console.error('[DB] Authentication error:', error)
+    console.error('[v0] Authentication error:', error)
     return {
       user: null,
       error: 'Authentication failed',
@@ -132,16 +143,22 @@ function generateUUID(): string {
  */
 export async function updateUserPassword(userId: string, newPassword: string): Promise<boolean> {
   try {
+    const supabase = await createClient()
     const passwordHash = await hashPassword(newPassword)
 
-    const result = await query(
-      'UPDATE public.users SET password_hash = $1 WHERE id = $2 RETURNING id',
-      [passwordHash, userId]
-    )
+    const { error } = await supabase
+      .from('users')
+      .update({ password_hash: passwordHash })
+      .eq('id', userId)
 
-    return result.rowCount !== null && result.rowCount > 0
+    if (error) {
+      console.error('[v0] Error updating password:', error)
+      return false
+    }
+
+    return true
   } catch (error) {
-    console.error('[DB] Error in updateUserPassword:', error)
+    console.error('[v0] Error in updateUserPassword:', error)
     return false
   }
 }
