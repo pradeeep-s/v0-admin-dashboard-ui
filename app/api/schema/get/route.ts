@@ -1,7 +1,11 @@
-import { getPooledClient } from '@/lib/supabase/pool'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(req: Request) {
-  const supabase = await getPooledClient()
   const { searchParams } = new URL(req.url)
   const schemeId = searchParams.get('schemeId')
 
