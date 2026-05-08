@@ -18,7 +18,7 @@ export async function GET() {
 
   return NextResponse.json({
   success: true,
-  data: data.map((r) => ({
+  data: data.map((r: any) => ({
     id: r.id,
     schemeId: r.scheme_id,
     columnName: r.column_name,
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
   success: true,
-  data: data.map((r) => ({
+  data: data.map((r: any) => ({
     id: r.id,
     schemeId: r.scheme_id,
     columnName: r.column_name,
