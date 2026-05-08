@@ -1,12 +1,12 @@
 import { cookies } from 'next/headers'
 import * as XLSX from 'xlsx'
-import { createClient } from '@/lib/supabase/server'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { NextResponse } from 'next/server'
 
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await getPooledClient()
 
     // 🔐 AUTH
     const cookieStore = await cookies()

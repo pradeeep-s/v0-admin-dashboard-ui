@@ -1,30 +1,36 @@
-import { createClient } from '@/lib/supabase/server'
+import { queryOne, queryMany } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    // Get user from session cookie
+    const cookieHeader = request.headers.get('cookie') || ''
+    const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+    
+    if (!sessionMatch) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    // Check if user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let session
+    try {
+      session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+    } catch (e) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 }
+      )
+    }
 
-    if (userError || userData?.role !== 'Admin') {
+    // Check if user is admin
+    const userData = await queryOne<any>(
+      'SELECT role FROM public.users WHERE id = $1',
+      [session.id]
+    )
+
+    if (!userData || userData.role !== 'Admin') {
       return NextResponse.json(
         { success: false, message: 'Only admins can access config' },
         { status: 403 }
@@ -36,23 +42,15 @@ export async function GET(request: Request) {
     const schemeId = searchParams.get('schemeId')
 
     if (type === 'column-mappings') {
-      let query = supabase
-        .from('column_mappings')
-        .select('id, scheme_id, excel_column, database_column, data_type, is_required')
+      let sqlQuery = 'SELECT id, scheme_id, excel_column, database_column, data_type, is_required FROM public.column_mappings'
+      const params: any[] = []
 
       if (schemeId) {
-        query = query.eq('scheme_id', schemeId)
+        sqlQuery += ` WHERE scheme_id = $1`
+        params.push(schemeId)
       }
 
-      const { data, error } = await query
-
-      if (error) {
-        console.error('[v0] Column mappings query error:', error)
-        return NextResponse.json(
-          { success: false, message: error.message, data: [] },
-          { status: 400 }
-        )
-      }
+      const data = await queryMany<any>(sqlQuery, params.length > 0 ? params : undefined)
 
       return NextResponse.json({
         success: true,
@@ -61,23 +59,15 @@ export async function GET(request: Request) {
     }
 
     if (type === 'validation-rules') {
-      let query = supabase
-        .from('validation_rules')
-        .select('id, scheme_id, column_name, rule_type, rule_value, error_message')
+      let sqlQuery = 'SELECT id, scheme_id, column_name, rule_type, rule_value, error_message FROM public.validation_rules'
+      const params: any[] = []
 
       if (schemeId) {
-        query = query.eq('scheme_id', schemeId)
+        sqlQuery += ` WHERE scheme_id = $1`
+        params.push(schemeId)
       }
 
-      const { data, error } = await query
-
-      if (error) {
-        console.error('[v0] Validation rules query error:', error)
-        return NextResponse.json(
-          { success: false, message: error.message, data: [] },
-          { status: 400 }
-        )
-      }
+      const data = await queryMany<any>(sqlQuery, params.length > 0 ? params : undefined)
 
       return NextResponse.json({
         success: true,
@@ -100,28 +90,34 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    // Get user from session cookie
+    const cookieHeader = request.headers.get('cookie') || ''
+    const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+    
+    if (!sessionMatch) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    // Check if user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let session
+    try {
+      session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+    } catch (e) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 }
+      )
+    }
 
-    if (userError || userData?.role !== 'Admin') {
+    // Check if user is admin
+    const userData = await queryOne<any>(
+      'SELECT role FROM public.users WHERE id = $1',
+      [session.id]
+    )
+
+    if (!userData || userData.role !== 'Admin') {
       return NextResponse.json(
         { success: false, message: 'Only admins can create config' },
         { status: 403 }
@@ -141,23 +137,17 @@ export async function POST(request: Request) {
         )
       }
 
-      const { data, error } = await supabase
-        .from('column_mappings')
-        .insert([
-          {
-            scheme_id: schemeId,
-            excel_column: excelColumn,
-            database_column: databaseColumn,
-            data_type: dataType,
-            is_required: isRequired || false,
-          },
-        ])
-        .select()
+      const data = await queryOne<any>(
+        `INSERT INTO public.column_mappings (scheme_id, excel_column, database_column, data_type, is_required, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING id, scheme_id, excel_column, database_column, data_type, is_required`,
+        [schemeId, excelColumn, databaseColumn, dataType, isRequired || false]
+      )
 
-      if (error) {
-        console.error('[v0] Column mapping creation error:', error)
+      if (!data) {
+        console.error('[DB] Column mapping creation error')
         return NextResponse.json(
-          { success: false, message: error.message },
+          { success: false, message: 'Failed to create column mapping' },
           { status: 400 }
         )
       }
@@ -165,7 +155,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         message: 'Column mapping created successfully',
-        data: data?.[0],
+        data,
       })
     }
 
@@ -179,23 +169,17 @@ export async function POST(request: Request) {
         )
       }
 
-      const { data, error } = await supabase
-        .from('validation_rules')
-        .insert([
-          {
-            scheme_id: schemeId,
-            column_name: columnName,
-            rule_type: ruleType,
-            rule_value: ruleValue || null,
-            error_message: errorMessage,
-          },
-        ])
-        .select()
+      const data = await queryOne<any>(
+        `INSERT INTO public.validation_rules (scheme_id, column_name, rule_type, rule_value, error_message, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING id, scheme_id, column_name, rule_type, rule_value, error_message`,
+        [schemeId, columnName, ruleType, ruleValue || null, errorMessage]
+      )
 
-      if (error) {
-        console.error('[v0] Validation rule creation error:', error)
+      if (!data) {
+        console.error('[DB] Validation rule creation error')
         return NextResponse.json(
-          { success: false, message: error.message },
+          { success: false, message: 'Failed to create validation rule' },
           { status: 400 }
         )
       }
@@ -203,7 +187,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         message: 'Validation rule created successfully',
-        data: data?.[0],
+        data,
       })
     }
 
@@ -212,7 +196,7 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   } catch (error) {
-    console.error('[v0] Config API error:', error)
+    console.error('[DB] Config API error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

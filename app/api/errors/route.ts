@@ -1,18 +1,25 @@
-import { createClient } from '@/lib/supabase/server'
+import { queryMany, queryOne } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    // Get user from session cookie
+    const cookieHeader = request.headers.get('cookie') || ''
+    const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+    
+    if (!sessionMatch) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    let session
+    try {
+      session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+    } catch (e) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
         { status: 401 }
       )
     }
@@ -22,42 +29,42 @@ export async function GET(request: Request) {
     const columnName = searchParams.get('columnName')
     const errorType = searchParams.get('errorType')
 
-    let query = supabase
-      .from('upload_errors')
-      .select(
-        `id, upload_id, row_number, column_name, error_message, 
-         error_type, created_at, uploads(user_id)`
-      )
-      .eq('uploads.user_id', user.id)
+    let sqlQuery = `
+      SELECT ue.id, ue.upload_id, ue.row_number, ue.column_name, ue.error_message, 
+             ue.error_type, ue.created_at, u.user_id
+      FROM public.upload_errors ue
+      JOIN public.uploads u ON ue.upload_id = u.id
+      WHERE u.user_id = $1
+    `
+    const params: any[] = [session.id]
+    let paramIndex = 2
 
     if (uploadId) {
-      query = query.eq('upload_id', uploadId)
+      sqlQuery += ` AND ue.upload_id = $${paramIndex}`
+      params.push(uploadId)
+      paramIndex++
     }
 
     if (columnName) {
-      query = query.ilike('column_name', `%${columnName}%`)
+      sqlQuery += ` AND ue.column_name ILIKE $${paramIndex}`
+      params.push(`%${columnName}%`)
+      paramIndex++
     }
 
     if (errorType) {
-      query = query.eq('error_type', errorType)
+      sqlQuery += ` AND ue.error_type = $${paramIndex}`
+      params.push(errorType)
+      paramIndex++
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      console.error('[v0] Errors query error:', error)
-      return NextResponse.json(
-        { success: false, message: error.message, data: [] },
-        { status: 400 }
-      )
-    }
+    const data = await queryMany<any>(sqlQuery, params)
 
     return NextResponse.json({
       success: true,
       data: data || [],
     })
   } catch (error) {
-    console.error('[v0] Errors API error:', error)
+    console.error('[DB] Errors API error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error', data: [] },
       { status: 500 }
