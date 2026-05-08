@@ -1,31 +1,66 @@
-import { createClient } from '@supabase/supabase-js'
+import { pool } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 // UPDATE
-export async function PUT(req: NextRequest, { params }: any) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const body = await req.json()
+  const { id } = await params
 
-  const { data, error } = await supabase
-    .from('branches')
-    .update(body)
-    .eq('id', params.id)
-    .select()
-    .single()
+  const client = await pool.connect()
 
-  return NextResponse.json({ data, error })
+  try {
+    const result = await client.query(
+      `UPDATE branches
+       SET name = $1, code = $2, location = $3
+       WHERE id = $4
+       RETURNING *`,
+      [body.name, body.code, body.location, id]
+    )
+
+    return NextResponse.json({
+      data: result.rows[0],
+      error: null,
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'Update failed' },
+      { status: 500 }
+    )
+  } finally {
+    client.release()
+  }
 }
 
 // DELETE
-export async function DELETE(req: NextRequest, { params }: any) {
-  const { error } = await supabase
-    .from('branches')
-    .delete()
-    .eq('id', params.id)
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
 
-  return NextResponse.json({ success: !error })
+  const client = await pool.connect()
+
+  try {
+    await client.query(
+      `DELETE FROM branches
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    )
+
+    return NextResponse.json({
+      success: true,
+      error: null,
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'Delete failed' },
+      { status: 500 }
+    )
+  } finally {
+    client.release()
+  }
 }
