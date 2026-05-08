@@ -1,13 +1,9 @@
 import * as XLSX from 'xlsx'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { getPooledClient } from '@/lib/supabase/pool'
 
 export async function GET(req: Request) {
   try {
+    const supabase = await getPooledClient()
     const schemeId = new URL(req.url).searchParams.get('schemeId')
 
     if (!schemeId) {

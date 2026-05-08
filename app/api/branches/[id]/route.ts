@@ -1,13 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 // UPDATE
 export async function PUT(req: NextRequest, { params }: any) {
+  const supabase = await getPooledClient()
   const body = await req.json()
 
   const { data, error } = await supabase

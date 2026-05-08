@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { NextResponse } from 'next/server'
 
 export async function PUT(req: Request, { params }: any) {
-  const supabase = await createClient()
+  const supabase = await getPooledClient()
   const body = await req.json()
 
   const { data, error } = await supabase
@@ -25,7 +25,7 @@ export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient()
+  const supabase = await getPooledClient()
 
   const { id } = await context.params  // ✅ FIX
 

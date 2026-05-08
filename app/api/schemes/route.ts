@@ -1,31 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+import { queryMany, queryOne, query } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const moduleId = searchParams.get('moduleId')
 
-    let query = supabase
-      .from('schemes')
-      .select('id, module_id, name, code, description, is_active')
-      .eq('is_active', true)
-      .order('name')
+    let sqlQuery = 'SELECT id, module_id, name, code, description, is_active FROM public.schemes WHERE is_active = true'
+    const params: any[] = []
 
     if (moduleId) {
-      query = query.eq('module_id', moduleId)
+      sqlQuery += ` AND module_id = $1`
+      params.push(moduleId)
     }
 
-    const { data, error } = await query
+    sqlQuery += ` ORDER BY name`
 
-    if (error) {
-      console.error('[v0] Schemes query error:', error)
-      return NextResponse.json(
-        { success: false, message: error.message, data: [] },
-        { status: 400 }
-      )
-    }
+    const data = await queryMany<any>(sqlQuery, params.length > 0 ? params : undefined)
 
     return NextResponse.json({
       success: true,
@@ -42,7 +33,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
     const body = await request.json()
 
     const { moduleId, name, code, description } = body
@@ -54,15 +44,17 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data, error } = await supabase
-      .from('schemes')
-      .insert([{ module_id: moduleId, name, code, description, is_active: true }])
-      .select()
+    const data = await queryOne<any>(
+      `INSERT INTO public.schemes (module_id, name, code, description, is_active, created_at)
+       VALUES ($1, $2, $3, $4, true, NOW())
+       RETURNING id, module_id, name, code, description, is_active`,
+      [moduleId, name, description || null]
+    )
 
-    if (error) {
-      console.error('[v0] Scheme creation error:', error)
+    if (!data) {
+      console.error('[DB] Scheme creation error')
       return NextResponse.json(
-        { success: false, message: error.message },
+        { success: false, message: 'Failed to create scheme' },
         { status: 400 }
       )
     }
@@ -70,10 +62,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Scheme created successfully',
-      data: data?.[0],
+      data,
     })
   } catch (error) {
-    console.error('[v0] Scheme API error:', error)
+    console.error('[DB] Scheme API error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
@@ -84,22 +76,24 @@ export async function PUT(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient()
-  const { id } = await context.params
-  const body = await req.json()
+  try {
+    const { id } = await context.params
+    const body = await req.json()
 
-  const { data, error } = await supabase
-    .from('schemes')
-    .update({
-      module_id: body.moduleId,
-      name: body.name,
-      code: body.code,
-      description: body.description,
-      is_active: body.isActive,
-    })
-    .eq('id', id)
-    .select()
-    .single()
+    const data = await queryOne<any>(
+      `UPDATE public.schemes 
+       SET module_id = $1, name = $2, code = $3, description = $4, is_active = $5, updated_at = NOW()
+       WHERE id = $6
+       RETURNING id, module_id, name, code, description, is_active`,
+      [body.moduleId, body.name, body.code, body.description || null, body.isActive, id]
+    )
 
-  return NextResponse.json({ success: !error, data })
+    return NextResponse.json({ success: !!data, data })
+  } catch (error) {
+    console.error('[DB] Scheme PUT error:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }
