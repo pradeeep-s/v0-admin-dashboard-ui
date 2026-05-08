@@ -9,7 +9,7 @@ import path from 'path'
 
 const __v0_turbopack_root = undefined ?? path.dirname(fileURLToPath(import.meta.url))
 
-export default async function v0NextConfig(phase, { defaultConfig }) {
+export async function v0NextConfig(phase, { defaultConfig }) {
   const userConfig = typeof userConfigImport === 'function'
     ? await userConfigImport(phase, { defaultConfig })
     : userConfigImport
@@ -50,3 +50,15 @@ export default async function v0NextConfig(phase, { defaultConfig }) {
   ],
 }
 }
+
+const nextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  images: {
+    unoptimized: true,
+  },
+ 
+}
+
+export default nextConfig
