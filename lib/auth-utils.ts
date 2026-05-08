@@ -31,7 +31,7 @@ export async function authenticateUser(
   password: string
 ): Promise<{ user: User | null; error: string | null; isNewUser: boolean }> {
   try {
-    const supabase = await createClient()
+    const supabase = await getPooledClient()
 
     console.log('[v0] Authenticating user with email:', email)
 
@@ -143,7 +143,7 @@ function generateUUID(): string {
  */
 export async function updateUserPassword(userId: string, newPassword: string): Promise<boolean> {
   try {
-    const supabase = await createClient()
+    const supabase = await getPooledClient()
     const passwordHash = await hashPassword(newPassword)
 
     const { error } = await supabase

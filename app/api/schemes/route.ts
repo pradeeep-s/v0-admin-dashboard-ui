@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await getPooledClient()
     const body = await request.json()
 
     const { moduleId, name, code, description } = body
@@ -84,7 +84,7 @@ export async function PUT(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient()
+  const supabase = await getPooledClient()
   const { id } = await context.params
   const body = await req.json()
 

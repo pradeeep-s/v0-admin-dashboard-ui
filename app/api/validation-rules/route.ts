@@ -30,7 +30,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = await getPooledClient()
 
   const body = await request.json()
 

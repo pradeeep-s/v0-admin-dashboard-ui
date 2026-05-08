@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createClient()
+  const supabase = await getPooledClient()
   const body = await req.json()
 
   const { name, code, description } = body
