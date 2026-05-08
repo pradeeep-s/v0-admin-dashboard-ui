@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await getPooledClient()
 
     const { searchParams } = new URL(request.url)
     const branchId = searchParams.get('branchId')

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { createClient } from '@/lib/supabase/server'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { User } from '@/lib/types'
 
 /**

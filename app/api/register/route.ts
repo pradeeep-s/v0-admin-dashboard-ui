@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { hashPassword } from '@/lib/auth-utils'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    // Get pooled client instance
+    const supabase = await getPooledClient()
 
     // Check if user already exists
     const { data: existingUser, error: checkError } = await supabase

@@ -1,10 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getPooledClient } from '@/lib/supabase/pool'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // IMPORTANT
-)
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +13,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[AUTH] Login attempt:', email)
+
+    // Get pooled client instance
+    const supabase = await getPooledClient()
 
     // 🔹 Get user from DB
     const { data: user, error } = await supabase
