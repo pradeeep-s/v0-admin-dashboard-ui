@@ -1,30 +1,36 @@
-import { getPooledClient } from '@/lib/supabase/pool'
+import { queryOne, queryMany } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await getPooledClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    // Get user from session cookie
+    const cookieHeader = request.headers.get('cookie') || ''
+    const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+    
+    if (!sessionMatch) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    // Check if user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let session
+    try {
+      session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+    } catch (e) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid session' },
+        { status: 401 }
+      )
+    }
 
-    if (userError || userData?.role !== 'Admin') {
+    // Check if user is admin
+    const userData = await queryOne<any>(
+      'SELECT role FROM public.users WHERE id = $1',
+      [session.id]
+    )
+
+    if (!userData || userData.role !== 'Admin') {
       return NextResponse.json(
         { success: false, message: 'Only admins can access config' },
         { status: 403 }
