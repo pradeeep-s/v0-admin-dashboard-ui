@@ -92,6 +92,8 @@ export function Sidebar({ onLogout }: SidebarProps) {
             </div>
             <h1 className="text-lg font-bold">Data Hub</h1>
           </div>
+          <p className="text-xs text-sidebar-foreground/60 mt-1">
+            Database Processing System
           <p className="text-xs text-gray-500 mt-1">
             Data Processing System
           </p>
