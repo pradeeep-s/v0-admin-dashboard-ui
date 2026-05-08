@@ -184,7 +184,7 @@ export async function POST(request: Request) {
         cleanRow[col.column_name] = value
         const rules =
   validationRules?.filter(
-    (r) => r.column_name === col.column_name
+    (r: any) => r.column_name === col.column_name
   ) || []
 
 for (const rule of rules) {

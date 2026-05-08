@@ -1,22 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Sign out from Supabase
-    const { error } = await supabase.auth.signOut()
-
-    if (error) {
-      console.error('[v0] Logout error:', error)
-    }
-
+    // Clear session cookie
     const response = NextResponse.json({
       success: true,
       message: 'Logout successful',
     })
 
+    response.cookies.delete('session')
     return response
   } catch (error) {
     console.error('[v0] Logout API error:', error)

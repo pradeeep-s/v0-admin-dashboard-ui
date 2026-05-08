@@ -17,7 +17,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs'
 import { Settings, Grid3x3, CheckSquare } from 'lucide-react'
-import { mockModules, mockSchemes, mockColumnMappings, mockValidationRules } from '@/lib/mock-data'
+
 
 export default function ConfigPage() {
   const [loading, setLoading] = useState(true)
@@ -39,7 +39,7 @@ export default function ConfigPage() {
       try {
         setLoading(true)
         // In a real app, these would come from API calls
-        setModules(mockModules)
+      
         await loadModules()
         await loadSchemes()
         await loadValidationRules()
