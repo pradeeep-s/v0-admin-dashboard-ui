@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SelectField, TextField, CheckboxField } from '@/components/common/form-field'
@@ -28,6 +29,8 @@ const DATA_TYPES = [
   { label: 'Boolean', value: 'boolean' },
 ]
 
+
+
 export function ColumnMappingComponent({
   schemes,
   mappings,
@@ -35,7 +38,6 @@ export function ColumnMappingComponent({
 }: ColumnMappingProps) {
   const [selectedScheme, setSelectedScheme] = useState('')
   const [newMapping, setNewMapping] = useState({
-    excelColumn: '',
     databaseColumn: '',
     dataType: 'string' as const,
     isRequired: false,
@@ -45,8 +47,31 @@ export function ColumnMappingComponent({
     ? mappings.filter((m) => m.schemeId === selectedScheme)
     : []
 
+    useEffect(() => {
+  if (!selectedScheme) return
+
+  const loadSchema = async () => {
+    const res = await fetch(`/api/schema/get?schemeId=${selectedScheme}`)
+    const json = await res.json()
+
+    if (json.success) {
+      const formatted = json.data.map((col: any) => ({
+        id: `${col.scheme_id}-${col.column_name}`,
+        schemeId: col.scheme_id,
+        databaseColumn: col.column_name,
+        dataType: col.data_type,
+        isRequired: col.is_required,
+      }))
+
+      onMappingsChange(formatted)
+    }
+  }
+
+  loadSchema()
+}, [selectedScheme])
+
   const handleAddMapping = () => {
-    if (!newMapping.excelColumn || !newMapping.databaseColumn || !selectedScheme) {
+    if (!newMapping.databaseColumn || !selectedScheme) {
       alert('Please fill all required fields')
       return
     }
@@ -55,11 +80,11 @@ export function ColumnMappingComponent({
       id: `COL-${Date.now()}`,
       schemeId: selectedScheme,
       ...newMapping,
+      
     }
 
     onMappingsChange([...mappings, mapping])
     setNewMapping({
-      excelColumn: '',
       databaseColumn: '',
       dataType: 'string',
       isRequired: false,
@@ -117,18 +142,7 @@ export function ColumnMappingComponent({
             <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
               <h4 className="font-medium">Add New Mapping</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <SelectField
-                  label="Excel Column"
-                  value={newMapping.excelColumn}
-                  onChange={(value) =>
-                    setNewMapping({
-                      ...newMapping,
-                      excelColumn: value,
-                    })
-                  }
-                  options={excelColumns}
-                  required
-                />
+                
                 <TextField
                   label="Database Column"
                   placeholder="e.g., member_id"
@@ -183,7 +197,7 @@ export function ColumnMappingComponent({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Excel Column</TableHead>
+                      
                       <TableHead>Database Column</TableHead>
                       <TableHead>Data Type</TableHead>
                       <TableHead>Required</TableHead>
@@ -193,9 +207,6 @@ export function ColumnMappingComponent({
                   <TableBody>
                     {schemeMappings.map((mapping) => (
                       <TableRow key={mapping.id}>
-                        <TableCell className="font-medium">
-                          {mapping.excelColumn}
-                        </TableCell>
                         <TableCell>
                           <code className="bg-muted px-2 py-1 rounded text-sm">
                             {mapping.databaseColumn}
@@ -228,6 +239,40 @@ export function ColumnMappingComponent({
                     ))}
                   </TableBody>
                 </Table>
+                <div className="flex gap-2 mt-4">
+                <Button className='mt-4 bg-blue-600 hover:bg-blue-700 text-white'
+              onClick={async () => {
+                await fetch('/api/schema/save', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    schemeId: selectedScheme,
+                    columns: schemeMappings,
+                  }),
+                })
+
+                alert('Schema saved')
+              }}
+            >
+              Save Schema
+            </Button>
+            </div>
+            <div className="flex gap-2">
+            <Button
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={async () => {
+                await fetch('/api/schema/create-table', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    schemeId: selectedScheme,
+                  }),
+                })
+
+                alert('Table created successfully')
+              }}
+            >
+              Create Table
+            </Button>
+            </div>
               </div>
             ) : (
               <p className="text-center text-muted-foreground py-8">

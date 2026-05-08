@@ -80,3 +80,26 @@ export async function POST(request: Request) {
     )
   }
 }
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { id } = await context.params
+  const body = await req.json()
+
+  const { data, error } = await supabase
+    .from('schemes')
+    .update({
+      module_id: body.moduleId,
+      name: body.name,
+      code: body.code,
+      description: body.description,
+      is_active: body.isActive,
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  return NextResponse.json({ success: !error, data })
+}

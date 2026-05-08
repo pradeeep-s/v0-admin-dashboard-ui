@@ -74,56 +74,67 @@ export default function UploadPage() {
   }, [formData.moduleId, showToast])
 
   const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault()
+  e.preventDefault()
 
-    if (!formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file) {
-      showToast('Please fill all required fields', 'error')
-      return
-    }
-
-    try {
-      setUploading(true)
-      setUploadProgress(0)
-      setUploadResult(null)
-
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          const next = prev + Math.random() * 25
-          return next > 90 ? 90 : next
-        })
-      }, 300)
-
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', formData.file)
-      uploadFormData.append('branchId', formData.branchId)
-      uploadFormData.append('moduleId', formData.moduleId)
-      uploadFormData.append('schemeId', formData.schemeId)
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: uploadFormData,
-        credentials: 'include',
-      })
-
-      clearInterval(progressInterval)
-      setUploadProgress(100)
-
-      const data = await res.json()
-
-      if (data.success) {
-        setUploadResult(data.data)
-        showToast('File uploaded successfully', 'success')
-      } else {
-        showToast(data.message || 'Upload failed', 'error')
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error)
-      showToast('Error uploading file', 'error')
-    } finally {
-      setUploading(false)
-    }
+  if (!formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file) {
+    showToast('Please fill all required fields', 'error')
+    return
   }
+
+  try {
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadResult(null)
+
+    const uploadFormData = new FormData()
+    uploadFormData.append('file', formData.file)
+    uploadFormData.append('branchId', formData.branchId)
+    uploadFormData.append('moduleId', formData.moduleId)
+    uploadFormData.append('schemeId', formData.schemeId)
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: uploadFormData,
+      credentials: 'include',
+    })
+
+    if (!res.ok) {
+      throw new Error(`HTTP error ${res.status}`)
+    }
+
+    const data = await res.json()
+
+    console.log('Upload Response:', data)
+
+    if (data.success) {
+      setUploadResult(data.data)
+      showToast('File uploaded successfully', 'success')
+
+      // ✅ DOWNLOAD ERROR FILE
+      if (data.errorFile) {
+        const blob = new Blob(
+          [Uint8Array.from(atob(data.errorFile), c => c.charCodeAt(0))],
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+        )
+
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'upload_errors.xlsx'
+        a.click()
+      }
+
+    } else {
+      showToast(data.message || 'Upload failed', 'error')
+    }
+
+  } catch (error) {
+    console.error('Upload failed:', error)
+    showToast('Upload failed', 'error')
+  } finally {
+    setUploading(false)
+  }
+}
 
   const isUploadDisabled = !formData.branchId || !formData.moduleId || !formData.schemeId || !formData.file
 

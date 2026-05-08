@@ -17,8 +17,8 @@ export function DashboardLayout({
       <Sidebar onLogout={onLogout} />
       <Navbar onLogout={onLogout} />
 
-      <main className="pt-16 md:ml-64">
-        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+      <main className="pt-2 md:ml-25">
+        <div className="p-4 md:p-6 lg:p-8 w-full">
           {children}
         </div>
       </main>

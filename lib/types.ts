@@ -1,3 +1,5 @@
+import { ReactNode } from "react"
+
 // User Types
 export type UserRole = 'Admin' | 'Operator'
 
@@ -47,7 +49,6 @@ export interface Scheme {
 export interface ColumnMapping {
   id: string
   schemeId: string
-  excelColumn: string
   databaseColumn: string
   dataType: 'string' | 'number' | 'date' | 'boolean'
   isRequired: boolean
@@ -69,6 +70,13 @@ export interface ValidationRule {
 export type UploadStatus = 'success' | 'partial' | 'failed' | 'pending'
 
 export interface UploadResult {
+  branches: any
+  modules: any
+  schemes: any
+  total_rows: ReactNode
+  success_rows: ReactNode
+  failed_rows: ReactNode
+  created_at: string | number | Date
   id: string
   branchId: string
   branchName: string

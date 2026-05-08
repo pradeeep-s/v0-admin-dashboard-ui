@@ -1,73 +1,29 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const supabase = await createClient()
+    // ✅ FIX: await cookies()
+    const cookieStore = await cookies()
+    const session = cookieStore.get('session')
 
-    // Get authenticated user from session (middleware handles this)
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !authUser) {
+    if (!session) {
       return NextResponse.json(
-        {
-          success: false,
-          message: 'Unauthorized - please log in',
-        },
+        { success: false, message: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    // Get user details from users table (includes role)
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, username, email, role, is_active, last_login')
-      .eq('email', authUser.email)
-      .single()
-
-    if (userError || !userData) {
-      console.error('[v0] User fetch error:', userError)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'User data not found',
-        },
-        { status: 404 }
-      )
-    }
-
-    if (!userData.is_active) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'User account is inactive',
-        },
-        { status: 403 }
-      )
-    }
+    const user = JSON.parse(session.value)
 
     return NextResponse.json({
       success: true,
-      message: 'User fetched successfully',
-      data: {
-        id: userData.id,
-        username: userData.username,
-        email: userData.email,
-        role: userData.role,
-        isActive: userData.is_active,
-        lastLogin: userData.last_login,
-      },
+      data: user,
     })
-  } catch (error) {
-    console.error('[v0] Me API error:', error)
+  } catch (err) {
+    console.error('[ME ERROR]', err)
     return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-      },
+      { success: false, message: 'Server error' },
       { status: 500 }
     )
   }

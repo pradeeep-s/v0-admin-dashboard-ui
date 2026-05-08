@@ -23,9 +23,12 @@ interface ValidationRulesProps {
 
 const RULE_TYPES = [
   { label: 'Required', value: 'required' },
-  { label: 'Minimum', value: 'min' },
-  { label: 'Maximum', value: 'max' },
-  { label: 'Pattern/Regex', value: 'regex' },
+  { label: 'Minimum Value (>=)', value: 'min' },
+  { label: 'Maximum Value (<=)', value: 'max' },
+  { label: 'Minimum Length', value: 'min_length' },
+  { label: 'Maximum Length', value: 'max_length' },
+  { label: 'Exact Length', value: 'length' },
+  { label: 'Pattern / Regex', value: 'regex' },
   { label: 'Unique', value: 'unique' },
   { label: 'Email', value: 'email' },
   { label: 'Numeric', value: 'numeric' },
@@ -39,7 +42,7 @@ export function ValidationRulesComponent({
   const [selectedScheme, setSelectedScheme] = useState('')
   const [newRule, setNewRule] = useState({
     columnName: '',
-    ruleType: 'required' as const,
+    ruleType: 'required' as 'required' | 'min' | 'max' | 'min_length' | 'max_length' | 'length' | 'regex' | 'unique' | 'email' | 'numeric',
     ruleValue: '',
     errorMessage: '',
   })
@@ -48,32 +51,60 @@ export function ValidationRulesComponent({
     ? rules.filter((r) => r.schemeId === selectedScheme)
     : []
 
-  const handleAddRule = () => {
-    if (!newRule.columnName || !newRule.errorMessage || !selectedScheme) {
-      alert('Please fill all required fields')
+  const handleAddRule = async () => {
+  if (!newRule.columnName || !newRule.errorMessage || !selectedScheme) {
+    alert('Please fill all required fields')
+    return
+  }
+
+  try {
+    const res = await fetch('/api/validation-rules', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schemeId: selectedScheme,
+        columnName: newRule.columnName,
+        ruleType: newRule.ruleType,
+        ruleValue: newRule.ruleValue || null,
+        errorMessage: newRule.errorMessage,
+      }),
+    })
+
+    const json = await res.json()
+
+    console.log(json)
+
+    if (!json.success) {
+      alert(json.message)
       return
     }
 
-    const rule: ValidationRule = {
-      id: `VAL-${Date.now()}`,
-      schemeId: selectedScheme,
-      columnName: newRule.columnName,
-      ruleType: newRule.ruleType,
-      ruleValue: newRule.ruleValue || undefined,
-      errorMessage: newRule.errorMessage,
-    }
+    onRulesChange([...rules, json.data])
 
-    onRulesChange([...rules, rule])
     setNewRule({
       columnName: '',
       ruleType: 'required',
       ruleValue: '',
       errorMessage: '',
     })
+  } catch (err) {
+    console.error(err)
+    alert('Failed to add validation rule')
   }
+}
 
-  const handleRemoveRule = (id: string) => {
-    onRulesChange(rules.filter((r) => r.id !== id))
+  const handleRemoveRule = async (id: string) => {
+    try {
+      await fetch(`/api/validation-rules/${id}`, {
+        method: 'DELETE',
+      })
+      onRulesChange(rules.filter((r) => r.id !== id))
+    } catch (err) {
+      console.error(err)
+      alert('Failed to delete validation rule')
+    }
   }
 
   const schemeOptions = schemes.map((s) => ({
@@ -139,23 +170,39 @@ export function ValidationRulesComponent({
               </div>
 
               {/* Conditional Rule Value Input */}
-              {['min', 'max', 'regex'].includes(newRule.ruleType) && (
+              {[
+  'min',
+  'max',
+  'min_length',
+  'max_length',
+  'length',
+  'regex',
+].includes(newRule.ruleType) && (
                 <TextField
                   label={
                     newRule.ruleType === 'min'
                       ? 'Minimum Value'
                       : newRule.ruleType === 'max'
                         ? 'Maximum Value'
-                        : 'Regex Pattern'
+                        : newRule.ruleType === 'min_length'
+                          ? 'Minimum Length'
+                          : newRule.ruleType === 'max_length'
+                            ? 'Maximum Length'
+                            : newRule.ruleType === 'length'
+                              ? 'Exact Length'
+                              : 'Regex Pattern'
                   }
                   placeholder={
                     newRule.ruleType === 'regex'
-                      ? 'e.g., ^[0-9]{10}$'
-                      : 'e.g., 100'
+                      ? 'e.g. ^[0-9]{10}$'
+                      : 'Enter value'
                   }
-                  value={newRule.ruleValue}
+                  value={newRule.ruleValue || ''}
                   onChange={(value) =>
-                    setNewRule({ ...newRule, ruleValue: value })
+                    setNewRule({
+                      ...newRule,
+                      ruleValue: value,
+                    })
                   }
                 />
               )}

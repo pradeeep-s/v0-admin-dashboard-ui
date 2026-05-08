@@ -33,7 +33,7 @@ export function Navbar({
         {/* Title */}
         <div className="hidden md:block">
           <h2 className="text-lg font-semibold text-foreground">
-            Excel Data Processing Dashboard
+            Data Processing Dashboard
           </h2>
         </div>
 

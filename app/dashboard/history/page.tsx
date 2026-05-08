@@ -109,27 +109,35 @@ export default function HistoryPage() {
                         <TableCell className="font-medium font-mono text-sm">
                           {upload.id}
                         </TableCell>
-                        <TableCell>{upload.branchName}</TableCell>
-                        <TableCell>{upload.moduleName}</TableCell>
-                        <TableCell>{upload.schemeName}</TableCell>
+                        <TableCell>
+                        {upload.branches?.name || '-'}
+                      </TableCell>
+
+                      <TableCell>
+                        {upload.modules?.name || '-'}
+                      </TableCell>
+
+                      <TableCell>
+                        {upload.schemes?.name || '-'}
+                      </TableCell>
                         <TableCell className="text-right font-medium">
-                          {upload.totalRows}
+                          {upload.total_rows}
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="text-green-600 dark:text-green-400 font-medium">
-                            {upload.successRows}
+                            {upload.success_rows}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="text-red-600 dark:text-red-400 font-medium">
-                            {upload.failedRows}
+                            {upload.failed_rows}
                           </span>
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={upload.status} />
                         </TableCell>
                         <TableCell className="text-sm">
-                          {new Date(upload.uploadedAt).toLocaleDateString(
+                          {new Date(upload.created_at).toLocaleDateString(
                             'en-IN',
                             {
                               month: 'short',
@@ -144,7 +152,7 @@ export default function HistoryPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleViewErrors(upload.id)}
-                              disabled={upload.failedRows === 0}
+                              disabled={upload.failed_rows === 0}
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -152,7 +160,7 @@ export default function HistoryPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDownloadErrors(upload.id)}
-                              disabled={upload.failedRows === 0}
+                              disabled={upload.failed_rows === 0}
                             >
                               <Download className="w-4 h-4" />
                             </Button>
