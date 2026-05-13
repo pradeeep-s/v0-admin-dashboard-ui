@@ -1,6 +1,10 @@
-import { authenticateUser } from '@/lib/auth-utils'
-import { query } from '@/lib/db'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // IMPORTANT
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,34 +19,49 @@ export async function POST(request: NextRequest) {
 
     console.log('[AUTH] Login attempt:', email)
 
-    // Authenticate user using users table
-    const { user, error, isNewUser } = await authenticateUser(email, password)
+    // 🔹 Get user from DB
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single()
 
     if (error || !user) {
       return NextResponse.json(
-        { success: false, message: error || 'Invalid email or password' },
+        { success: false, message: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
-    if (!user.isActive) {
+    // 🔹 Verify password (bcrypt)
+    const { data: match } = await supabase.rpc('verify_password', {
+      password_input: password,
+      password_hash: user.password_hash,
+    })
+
+    if (!match) {
       return NextResponse.json(
-        { success: false, message: 'User account is inactive' },
+        { success: false, message: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    if (!user.is_active) {
+      return NextResponse.json(
+        { success: false, message: 'User inactive' },
         { status: 403 }
       )
     }
 
-    // Update last login
-    try {
-      await query('UPDATE public.users SET last_login = NOW() WHERE id = $1', [user.id])
-    } catch (err) {
-      console.warn('[AUTH] Failed to update last login:', err)
-    }
+    // 🔹 Update last login
+    await supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', user.id)
 
-    // Set session cookie
+    // 🔐 Set session cookie
     const response = NextResponse.json({
       success: true,
-      message: isNewUser ? 'Account created and logged in' : 'Login successful',
       data: {
         id: user.id,
         email: user.email,
@@ -51,18 +70,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    response.cookies.set(
-      'session',
-      JSON.stringify({
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      }),
-      {
-        httpOnly: true,
-        path: '/',
-      }
-    )
+    response.cookies.set('session', JSON.stringify({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    }), {
+      httpOnly: true,
+      path: '/',
+    })
 
     return response
   } catch (err) {

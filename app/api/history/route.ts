@@ -1,50 +1,44 @@
-import { queryMany } from '@/lib/db'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient()
+
     const { searchParams } = new URL(request.url)
     const branchId = searchParams.get('branchId')
     const moduleId = searchParams.get('moduleId')
 
-    let sqlQuery = `
-      SELECT 
-        u.id, u.user_id, u.username, u.branch_id, u.module_id, u.scheme_id, 
-        u.file_name, u.total_rows, u.success_rows, u.failed_rows, u.status, u.created_at,
-        b.name as branch_name, b.code as branch_code,
-        m.name as module_name,
-        s.name as scheme_name
-      FROM public.uploads u
-      LEFT JOIN public.branches b ON u.branch_id = b.id
-      LEFT JOIN public.modules m ON u.module_id = m.id
-      LEFT JOIN public.schemes s ON u.scheme_id = s.id
-      WHERE 1=1
-    `
-    const params: any[] = []
-    let paramIndex = 1
+   let query = supabase
+  .from('uploads')
+  .select(`
+    id, user_id, username, branch_id, module_id, scheme_id, file_name,
+    total_rows, success_rows, failed_rows, status, created_at,
+    branches!fk_branch(name, code),
+    modules!fk_module(name),
+    schemes(name)
+  `)
+  .order('created_at', { ascending: false })
 
-    if (branchId) {
-      sqlQuery += ` AND u.branch_id = $${paramIndex}`
-      params.push(branchId)
-      paramIndex++
+    if (branchId) query = query.eq('branch_id', branchId)
+    if (moduleId) query = query.eq('module_id', moduleId)
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('History error:', error)
+      return NextResponse.json(
+        { success: false, message: error.message, data: [] },
+        { status: 400 }
+      )
     }
-
-    if (moduleId) {
-      sqlQuery += ` AND u.module_id = $${paramIndex}`
-      params.push(moduleId)
-      paramIndex++
-    }
-
-    sqlQuery += ` ORDER BY u.created_at DESC`
-
-    const data = await queryMany<any>(sqlQuery, params)
 
     return NextResponse.json({
       success: true,
       data: data || [],
     })
   } catch (err) {
-    console.error('[DB] History error:', err)
+    console.error(err)
     return NextResponse.json(
       { success: false, message: 'Internal server error', data: [] },
       { status: 500 }

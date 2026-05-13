@@ -1,8 +1,8 @@
-import { getPooledClient } from '@/lib/supabase/pool'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  const supabase = await getPooledClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from('modules')
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await getPooledClient()
+  const supabase = await createClient()
   const body = await req.json()
 
   const { name, code, description } = body

@@ -1,4 +1,4 @@
-import { getPooledClient } from '@/lib/supabase/pool'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function PUT(
@@ -7,7 +7,7 @@ export async function PUT(
 ) {
   const { id } = await params
 
-  const supabase = await getPooledClient()
+  const supabase = await createClient()
 
   const body = await request.json()
 
@@ -36,7 +36,7 @@ export async function DELETE(
 ) {
   const { id } = await params
 
-  const supabase = await getPooledClient()
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from('validation_rules')

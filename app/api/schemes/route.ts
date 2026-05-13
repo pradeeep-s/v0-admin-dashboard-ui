@@ -1,22 +1,31 @@
-import { queryMany, queryOne, query } from '@/lib/db'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const moduleId = searchParams.get('moduleId')
 
-    let sqlQuery = 'SELECT id, module_id, name, code, description, is_active FROM public.schemes WHERE is_active = true'
-    const params: any[] = []
+    let query = supabase
+      .from('schemes')
+      .select('id, module_id, name, code, description, is_active')
+      .eq('is_active', true)
+      .order('name')
 
     if (moduleId) {
-      sqlQuery += ` AND module_id = $1`
-      params.push(moduleId)
+      query = query.eq('module_id', moduleId)
     }
 
-    sqlQuery += ` ORDER BY name`
+    const { data, error } = await query
 
-    const data = await queryMany<any>(sqlQuery, params.length > 0 ? params : undefined)
+    if (error) {
+      console.error('[v0] Schemes query error:', error)
+      return NextResponse.json(
+        { success: false, message: error.message, data: [] },
+        { status: 400 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -33,6 +42,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient()
     const body = await request.json()
 
     const { moduleId, name, code, description } = body
@@ -44,17 +54,15 @@ export async function POST(request: Request) {
       )
     }
 
-    const data = await queryOne<any>(
-      `INSERT INTO public.schemes (module_id, name, code, description, is_active, created_at)
-       VALUES ($1, $2, $3, $4, true, NOW())
-       RETURNING id, module_id, name, code, description, is_active`,
-      [moduleId, name, description || null]
-    )
+    const { data, error } = await supabase
+      .from('schemes')
+      .insert([{ module_id: moduleId, name, code, description, is_active: true }])
+      .select()
 
-    if (!data) {
-      console.error('[DB] Scheme creation error')
+    if (error) {
+      console.error('[v0] Scheme creation error:', error)
       return NextResponse.json(
-        { success: false, message: 'Failed to create scheme' },
+        { success: false, message: error.message },
         { status: 400 }
       )
     }
@@ -62,38 +70,14 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Scheme created successfully',
-      data,
+      data: data?.[0],
     })
   } catch (error) {
-    console.error('[DB] Scheme API error:', error)
+    console.error('[v0] Scheme API error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-export async function PUT(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params
-    const body = await req.json()
 
-    const data = await queryOne<any>(
-      `UPDATE public.schemes 
-       SET module_id = $1, name = $2, code = $3, description = $4, is_active = $5, updated_at = NOW()
-       WHERE id = $6
-       RETURNING id, module_id, name, code, description, is_active`,
-      [body.moduleId, body.name, body.code, body.description || null, body.isActive, id]
-    )
-
-    return NextResponse.json({ success: !!data, data })
-  } catch (error) {
-    console.error('[DB] Scheme PUT error:', error)
-    return NextResponse.json(
-      { success: false, message: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}

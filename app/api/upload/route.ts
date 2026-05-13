@@ -1,12 +1,12 @@
 import { cookies } from 'next/headers'
 import * as XLSX from 'xlsx'
-import { getPooledClient } from '@/lib/supabase/pool'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 
 export async function POST(request: Request) {
   try {
-    const supabase = await getPooledClient()
+    const supabase = await createClient()
 
     // 🔐 AUTH
     const cookieStore = await cookies()
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
         cleanRow[col.column_name] = value
         const rules =
   validationRules?.filter(
-    (r) => r.column_name === col.column_name
+    (r: any) => r.column_name === col.column_name
   ) || []
 
 for (const rule of rules) {

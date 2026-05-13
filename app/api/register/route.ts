@@ -1,5 +1,5 @@
+import { createClient } from '@/lib/supabase/server'
 import { hashPassword } from '@/lib/auth-utils'
-import { queryOne, query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -31,11 +31,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabase = await createClient()
+
     // Check if user already exists
-    const existingUser = await queryOne<any>(
-      'SELECT id FROM public.users WHERE email = $1',
-      [email]
-    )
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
 
     if (existingUser) {
       return NextResponse.json(
@@ -54,10 +57,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if username is unique
-    const existingUsername = await queryOne<any>(
-      'SELECT id FROM public.users WHERE username = $1',
-      [finalUsername]
-    )
+    const { data: existingUsername } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', finalUsername)
+      .single()
 
     if (existingUsername) {
       return NextResponse.json(
@@ -73,18 +77,26 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password)
 
     // Generate UUID for new user
-    const userId = crypto.randomUUID()
+    const userId = crypto.randomUUID ? crypto.randomUUID() : generateUUID()
 
     // Create user in users table
-    const newUser = await queryOne<any>(
-      `INSERT INTO public.users (id, email, username, password_hash, role, is_active, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING id, username, email, role, is_active`,
-      [userId, email, finalUsername, passwordHash, role || 'Operator', true]
-    )
+    const { data: newUser, error: createError } = await supabase
+      .from('users')
+      .insert([
+        {
+          id: userId,
+          email,
+          username: finalUsername,
+          password_hash: passwordHash,
+          role: role || 'Operator',
+          is_active: true,
+        },
+      ])
+      .select('id, username, email, role, is_active')
+      .single()
 
-    if (!newUser) {
-      console.error('[DB] Error creating user')
+    if (createError) {
+      console.error('[v0] Error creating user:', createError)
       return NextResponse.json(
         {
           success: false,
@@ -94,7 +106,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[DB] New user registered:', email)
+    console.log('[v0] New user registered:', email)
 
     return NextResponse.json(
       {
@@ -111,7 +123,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('[DB] Register API error:', error)
+    console.error('[v0] Register API error:', error)
     return NextResponse.json(
       {
         success: false,
