@@ -1,0 +1,370 @@
+================================================================================
+POSTGRESQL DIRECT CONNECTION MIGRATION - IN PROGRESS
+================================================================================
+
+STATUS: Core infrastructure ready, routes being updated
+
+================================================================================
+WHAT'S BEEN DONE
+================================================================================
+
+1. Created lib/db.ts (128 lines)
+   ✅ PostgreSQL connection pool using 'pg' driver
+   ✅ Four main functions:
+      - query<T>(): Execute any SQL, returns QueryResult
+      - queryOne<T>(): GET single row, returns T | undefined
+      - queryMany<T>(): GET multiple rows, returns T[]
+      - transaction<T>(): Execute multiple queries in transaction
+   ✅ Connection management (30s idle timeout, max 20 connections)
+   ✅ Error handling and logging
+
+2. Updated core authentication (lib/auth-utils.ts)
+   ✅ authenticateUser() - Uses direct SQL queries
+   ✅ updateUserPassword() - Uses direct SQL queries
+   ✅ Both functions use queryOne() and query() from lib/db
+   ✅ All Supabase client calls removed
+
+3. Updated key API routes
+   ✅ app/api/login/route.ts - Uses authenticateUser()
+   ✅ app/api/register/route.ts - Direct SQL INSERT with queryOne()
+   ✅ app/api/config/route.ts - Session cookie parsing + SQL queries
+
+4. Created comprehensive migration guide
+   ✅ POSTGRESQL_MIGRATION_GUIDE.md (433 lines)
+      - Pattern conversions (before/after examples)
+      - All 4 utility functions documented
+      - 6 migration examples (SELECT, INSERT, UPDATE, DELETE, JOIN, transaction)
+      - Session handling guide
+      - SQL best practices
+      - Performance tips
+      - Debugging guide
+
+================================================================================
+DATABASE CONNECTION
+================================================================================
+
+Using 'pg' library with PostgreSQL connection pooling:
+
+Pool Config:
+  - Max 20 connections
+  - 30 second idle timeout
+  - 2 second connection timeout
+  - Automatic connection management
+
+Connection String:
+  DATABASE_URL (environment variable)
+  Format: postgresql://user:password@host:port/database
+
+Usage:
+  import { query, queryOne, queryMany } from '@/lib/db'
+  
+  const user = await queryOne('SELECT * FROM users WHERE id = $1', [id])
+  const users = await queryMany('SELECT * FROM users LIMIT 10')
+  const result = await query('UPDATE users SET role = $1 WHERE id = $2', ['Admin', id])
+
+================================================================================
+MIGRATION PATTERN
+================================================================================
+
+FROM: Supabase Query Builder + Session Auth
+TO: Raw PostgreSQL + Cookie Session
+
+BEFORE (Supabase):
+  import { getPooledClient } from '@/lib/supabase/pool'
+  const supabase = await getPooledClient()
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email)
+
+AFTER (PostgreSQL):
+  import { queryOne } from '@/lib/db'
+  const user = await queryOne(
+    'SELECT * FROM users WHERE email = $1',
+    [email]
+  )
+
+Benefits:
+  ✓ Simpler: No ORM abstraction
+  ✓ Faster: Direct SQL execution
+  ✓ More control: Full SQL power
+  ✓ Standard: Industry-standard PostgreSQL driver
+
+================================================================================
+KEY FUNCTIONS IN lib/db.ts
+================================================================================
+
+1. query(sql, values): QueryResult
+   - For: INSERT, UPDATE, DELETE, or any query
+   - Returns: { rows, rowCount, command, oid, etc. }
+   - Use rowCount: result.rowCount > 0
+
+2. queryOne<T>(sql, values): T | undefined
+   - For: SELECT queries expecting 0-1 rows
+   - Returns: First row or undefined
+   - Perfect for: User lookups, single record fetches
+
+3. queryMany<T>(sql, values): T[]
+   - For: SELECT queries expecting multiple rows
+   - Returns: Array of rows (empty array if no matches)
+   - Perfect for: List queries, batch fetches
+
+4. transaction(callback): T
+   - For: Multiple operations that must succeed together
+   - Auto commits/rollbacks
+   - Callback receives client for multiple queries
+
+5. testConnection(): boolean
+   - For: Checking database connectivity
+   - Returns: true if connection works
+
+6. closePool(): void
+   - For: Shutting down connections gracefully
+   - Call on application shutdown
+
+================================================================================
+PARAMETER BINDING (IMPORTANT!)
+================================================================================
+
+ALWAYS use parameterized queries with $1, $2, $3:
+
+✅ CORRECT:
+  await query('SELECT * FROM users WHERE email = $1', [email])
+  await query('UPDATE users SET role = $1 WHERE id = $2', ['Admin', id])
+
+❌ WRONG (SQL Injection Risk):
+  await query(`SELECT * FROM users WHERE email = '${email}'`)
+  await query(`UPDATE users SET role = '${role}' WHERE id = ${id}`)
+
+Parameter order: $1 is values[0], $2 is values[1], etc.
+
+================================================================================
+SESSION HANDLING
+================================================================================
+
+No more Supabase Auth. Use session cookies instead:
+
+CREATE SESSION (in login route):
+  response.cookies.set('session', JSON.stringify({
+    id: user.id,
+    email: user.email,
+    role: user.role
+  }), { httpOnly: true })
+
+RETRIEVE SESSION:
+  const cookieHeader = request.headers.get('cookie') || ''
+  const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+  const session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+  
+  // Use: session.id, session.email, session.role
+
+VALIDATE SESSION:
+  const user = await queryOne(
+    'SELECT * FROM users WHERE id = $1 AND is_active = true',
+    [session.id]
+  )
+  if (!user) return 401 Unauthorized
+
+================================================================================
+FILES USING DIRECT POSTGRESQL
+================================================================================
+
+Already Updated:
+  ✅ lib/db.ts (core database module)
+  ✅ lib/auth-utils.ts (authentication logic)
+  ✅ app/api/login/route.ts (login endpoint)
+  ✅ app/api/register/route.ts (registration endpoint)
+  ✅ app/api/config/route.ts (admin config)
+
+Still Need Updates:
+  🔲 app/api/logout/route.ts
+  🔲 app/api/errors/route.ts
+  🔲 app/api/history/route.ts
+  🔲 app/api/me/route.ts
+  🔲 app/api/modules/route.ts
+  🔲 app/api/modules/[id]/route.ts
+  🔲 app/api/schema/route.ts
+  🔲 app/api/schemas/route.ts
+  🔲 app/api/schemas/[id]/route.ts
+  🔲 app/api/upload/route.ts
+  🔲 app/api/validation-rules/route.ts
+  🔲 app/api/validation-rules/[id]/route.ts
+  🔲 app/api/branches/route.ts
+  🔲 app/api/branches/[id]/route.ts
+  🔲 app/api/schema/create-table/route.ts
+  🔲 app/api/schema/get/route.ts
+  🔲 app/api/schema/save/route.ts
+  🔲 app/api/template/download/route.ts
+
+================================================================================
+UPDATING A ROUTE - TEMPLATE
+================================================================================
+
+1. Replace imports:
+   FROM: import { getPooledClient } from '@/lib/supabase/pool'
+   TO:   import { query, queryOne, queryMany } from '@/lib/db'
+
+2. Get session (if needed):
+   const cookieHeader = request.headers.get('cookie') || ''
+   const sessionMatch = cookieHeader.match(/session=([^;]+)/)
+   const session = JSON.parse(decodeURIComponent(sessionMatch[1]))
+
+3. Replace Supabase calls:
+   FROM: const { data, error } = await supabase.from('users').select()...
+   TO:   const users = await queryMany('SELECT * FROM users LIMIT 10')
+
+4. Update error handling:
+   FROM: if (error) return error
+   TO:   try { ... } catch (e) { ... }
+
+5. Update log prefixes:
+   FROM: console.log('[v0]')
+   TO:   console.log('[DB]')
+
+6. Test the route
+
+See POSTGRESQL_MIGRATION_GUIDE.md for detailed examples.
+
+================================================================================
+TESTING THE MIGRATION
+================================================================================
+
+1. Test login:
+   POST /api/login
+   { "email": "admin@pacs.com", "password": "admin123" }
+   Expected: 200, session cookie set
+
+2. Test register:
+   POST /api/register
+   { "email": "test@example.com", "password": "test123" }
+   Expected: 201, user created
+
+3. Test authenticated route:
+   GET /api/me (with session cookie)
+   Expected: 200, current user data
+
+4. Test admin route:
+   GET /api/config (with admin session cookie)
+   Expected: 200, config data
+
+5. Check database:
+   psql $DATABASE_URL
+   SELECT * FROM users;
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Update remaining 16 API routes using the migration pattern
+2. Test each route with sample data
+3. Verify session handling works correctly
+4. Check database query performance
+5. Deploy to production
+
+Each route follows the same pattern:
+  1. Import from lib/db
+  2. Parse session from cookies if needed
+  3. Replace Supabase calls with SQL queries
+  4. Update error handling
+  5. Test
+
+Estimated time: 30-45 minutes for all routes
+
+================================================================================
+DOCUMENTATION
+================================================================================
+
+Read these files for more info:
+  - POSTGRESQL_MIGRATION_GUIDE.md (433 lines) - Complete migration guide
+  - lib/db.ts (128 lines) - Database module source code
+  - POSTGRESQL_DIRECT_CONNECTION_SUMMARY.txt - This file
+
+================================================================================
+ADVANTAGES OF DIRECT POSTGRESQL
+================================================================================
+
+Performance:
+  ✓ No ORM overhead - direct SQL execution
+  ✓ Faster query building (no abstraction layer)
+  ✓ Better for complex queries (joins, aggregations)
+  ✓ Full PostgreSQL power available
+
+Simplicity:
+  ✓ Standard SQL - easier to understand
+  ✓ No proprietary syntax (Supabase query builder)
+  ✓ Easier to optimize
+  ✓ Industry standard
+
+Control:
+  ✓ Full control over queries
+  ✓ Easier to debug SQL
+  ✓ Can use advanced PostgreSQL features
+  ✓ Direct connection management
+
+Reliability:
+  ✓ Standard 'pg' library - battle-tested
+  ✓ Less abstraction = fewer bugs
+  ✓ Clear error messages
+  ✓ Full transaction support
+
+================================================================================
+COMMON ISSUES & SOLUTIONS
+================================================================================
+
+Issue: "too many connections"
+  Solution: Decrease pool max size in lib/db.ts from 20 to 10
+  Cause: Too many concurrent connections
+
+Issue: "Query timeout"
+  Solution: Check database connectivity
+  Cause: Connection timeout or slow query
+
+Issue: "Parameter mismatch: \$1 has no value"
+  Solution: Check parameter count in query vs values array
+  Example: 'WHERE id = $1 AND email = $2' needs 2 values
+
+Issue: "relation 'users' does not exist"
+  Solution: Use 'public.users' instead of 'users'
+  Cause: Schema name required in queries
+
+Issue: "Session is undefined"
+  Solution: Check session cookie parsing
+  Verify: Cookie format and JSON parsing
+
+================================================================================
+ROLLBACK (If Needed)
+================================================================================
+
+If issues occur with PostgreSQL migration:
+  1. Revert files to previous commit
+  2. Delete lib/db.ts
+  3. Go back to using getPooledClient()
+  4. Takes 5 minutes
+
+But everything should work! The migration is straightforward.
+
+================================================================================
+VERSION & STATUS
+================================================================================
+
+Version: 2.0 (PostgreSQL Direct Connection)
+Status: In Progress - Core done, routes being updated
+Completed: 5 files (auth, login, register, config)
+Remaining: 16 routes to update
+Estimated Completion: < 1 hour
+
+All changes are backward compatible until fully migrated.
+
+================================================================================
+Contact/Support
+================================================================================
+
+Questions about the migration?
+  1. Check POSTGRESQL_MIGRATION_GUIDE.md for examples
+  2. Review lib/db.ts source code
+  3. Check existing routes (login, register) as examples
+  4. Read PostgreSQL documentation for SQL help
+
+Ready to update remaining routes!
+
+================================================================================
