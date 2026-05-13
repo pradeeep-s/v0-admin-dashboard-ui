@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { hashPassword } from '@/lib/auth-utils'
+import { queryOne, query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password, username, role } = body
+    const { email, password, username, role, branchId } = body
 
     if (!email || !password) {
       return NextResponse.json(
@@ -31,14 +31,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
-
     // Check if user already exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single()
+    const existingUser = await queryOne<any>(
+      'SELECT id FROM public.users WHERE email = $1',
+      [email]
+    )
 
     if (existingUser) {
       return NextResponse.json(
@@ -57,11 +54,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if username is unique
-    const { data: existingUsername } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', finalUsername)
-      .single()
+    const existingUsername = await queryOne<any>(
+      'SELECT id FROM public.users WHERE username = $1',
+      [finalUsername]
+    )
 
     if (existingUsername) {
       return NextResponse.json(
@@ -77,26 +73,18 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password)
 
     // Generate UUID for new user
-    const userId = crypto.randomUUID ? crypto.randomUUID() : generateUUID()
+    const userId = crypto.randomUUID()
 
     // Create user in users table
-    const { data: newUser, error: createError } = await supabase
-      .from('users')
-      .insert([
-        {
-          id: userId,
-          email,
-          username: finalUsername,
-          password_hash: passwordHash,
-          role: role || 'Operator',
-          is_active: true,
-        },
-      ])
-      .select('id, username, email, role, is_active')
-      .single()
+    const newUser = await queryOne<any>(
+      `INSERT INTO public.users (id, email, username, password_hash, role, branch_id, is_active, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+       RETURNING id, username, email, role, is_active, branch_id as "branchId"`,
+      [userId, email, finalUsername, passwordHash, role || 'Operator', branchId || null]
+    )
 
-    if (createError) {
-      console.error('[v0] Error creating user:', createError)
+    if (!newUser) {
+      console.error('[DB] Error creating user')
       return NextResponse.json(
         {
           success: false,
@@ -106,7 +94,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[v0] New user registered:', email)
+    console.log('[DB] New user registered:', email)
 
     return NextResponse.json(
       {
@@ -118,12 +106,13 @@ export async function POST(request: NextRequest) {
           email: newUser.email,
           role: newUser.role,
           isActive: newUser.is_active,
+          branchId: newUser.branchId,
         },
       },
       { status: 201 }
     )
   } catch (error) {
-    console.error('[v0] Register API error:', error)
+    console.error('[DB] Register API error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -132,15 +121,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-/**
- * Simple UUID generator fallback
- */
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
 }

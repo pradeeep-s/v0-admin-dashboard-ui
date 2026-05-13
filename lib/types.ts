@@ -1,7 +1,7 @@
 import { ReactNode } from "react"
 
 // User Types
-export type UserRole = 'Admin' | 'Operator'
+export type UserRole = 'Admin' | 'Branch' | 'Operator'
 
 export interface User {
   id: string
@@ -9,6 +9,26 @@ export interface User {
   email: string
   role: UserRole
   isActive: boolean
+  branchId?: string | null
+}
+
+// Permission Types
+export type PermissionResource = 
+  | 'dashboard'
+  | 'users'
+  | 'branches'
+  | 'modules'
+  | 'module_columns'
+  | 'queries'
+  | 'uploads'
+  | 'errors'
+  | 'settings'
+
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'configure'
+
+export interface Permission {
+  resource: PermissionResource
+  actions: PermissionAction[]
 }
 
 export interface AuthResponse {

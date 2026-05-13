@@ -34,7 +34,14 @@ export function LoginForm() {
       })
 
       if (user) {
-        router.push('/dashboard')
+        // Route based on user role
+        const rolePaths: Record<string, string> = {
+          Admin: '/admin/dashboard',
+          Branch: '/branch/dashboard',
+          Operator: '/operator/dashboard',
+        }
+        const redirectPath = rolePaths[user.role] || '/dashboard'
+        router.push(redirectPath)
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -117,6 +124,7 @@ export function LoginForm() {
             <div className="pt-2 text-center text-xs text-muted-foreground">
               <p className="font-semibold mb-2">Demo Credentials:</p>
               <p>Admin: admin@pacs.com / admin123</p>
+              <p>Branch: branch@pacs.com / branch123</p>
               <p>Operator: operator@pacs.com / operator123</p>
             </div>
           </form>
