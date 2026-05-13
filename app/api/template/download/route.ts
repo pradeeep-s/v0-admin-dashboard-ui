@@ -31,10 +31,12 @@ export async function GET(req: Request) {
       .replace(/\s+/g, '_')
 
     // 🟢 Get columns from YOUR schema table
-    const { data: columns, error } = await supabase
-      .from('dynamic_schemas')
-      .select('column_name')
-      .eq('scheme_id', schemeId)
+    const { data: columns, error } = await supabase.rpc(
+      "get_table_columns",
+      {
+        table_name: tableName,
+      }
+    );
 
     if (error || !columns || columns.length === 0) {
       return new Response('No schema found', { status: 400 })

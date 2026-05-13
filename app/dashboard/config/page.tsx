@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/tabs'
 import { Settings, Grid3x3, CheckSquare } from 'lucide-react'
 
-
 export default function ConfigPage() {
   const [loading, setLoading] = useState(true)
   const [modules, setModules] = useState<Module[]>([])

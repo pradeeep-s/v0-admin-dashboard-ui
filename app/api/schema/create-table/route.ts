@@ -53,7 +53,7 @@ export async function POST(req: Request) {
    const dropQuery = `DROP TABLE IF EXISTS "${tableName}" CASCADE`
     console.log('Executing SQL:', dropQuery)
 
-    await supabase.rpc('execute_sql', { query: dropQuery })
+    await supabase.rpc('execute_sql', { sql_query: dropQuery })
 
 
     // 🟢 5. Build SQL columns
@@ -72,17 +72,13 @@ export async function POST(req: Request) {
     // 🟢 6. Create new table
    const createQuery = `
   CREATE TABLE "${tableName}" (
-    id UUID DEFAULT gen_random_uuid(),
-    branch_id UUID,
-    branch_name TEXT,
-    branch_code TEXT,
-    module_id UUID,
-    module_name TEXT,
+    branch_id numeric ,
+    branch_name text,
     ${sqlColumns.join(',')}
   )
 `
-
-    await supabase.rpc('execute_sql', { query: createQuery })
+    console.log('Executing SQL:', createQuery)
+    await supabase.rpc('execute_sql', { sql_query: createQuery })
 
     return Response.json({
       success: true,

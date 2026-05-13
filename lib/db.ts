@@ -7,11 +7,5 @@ export const pool = new Pool({
   database: process.env.POSTGRES_DATABASE,
   port: 5432,
 
-  ssl: {
-    rejectUnauthorized: false,
-  },
-
-  max: 5,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+ 
 })

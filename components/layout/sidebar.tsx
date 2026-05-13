@@ -37,6 +37,16 @@ const menuItems = [
     href: '/dashboard/config',
     icon: Settings,
   },
+  {
+    label: 'Query Data',
+    href: '/dashboard/queries',
+    icon: Upload,
+  },
+  {
+    label: 'Move Data',
+    href: '/dashboard/copy',
+    icon: Upload,
+  },
 {
   label: 'Download Templates',
   href: '/dashboard/templates',
