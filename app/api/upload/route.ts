@@ -1,123 +1,163 @@
-import { cookies } from 'next/headers'
-import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/server'
+import * as XLSX from 'xlsx'
 import { NextResponse } from 'next/server'
-
+import { cookies } from 'next/headers'
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
 
-    // 🔐 AUTH
+    // =========================
+    // AUTH
+    // =========================
     const cookieStore = await cookies()
     const session = cookieStore.get('session')
 
     if (!session) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
     const user = JSON.parse(session.value)
 
-    // 🟢 INPUT
+    // =========================
+    // INPUT
+    // =========================
     const formData = await request.formData()
 
     const file = formData.get('file') as File
-    const branchId = formData.get('branchId') as string
     const moduleId = formData.get('moduleId') as string
     const schemeId = formData.get('schemeId') as string
 
-    if (!file || !branchId || !moduleId || !schemeId) {
-      return NextResponse.json({ success: false, message: 'Missing fields' }, { status: 400 })
+    if (!file || !schemeId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Missing fields',
+      })
     }
 
-    // 🟢 READ EXCEL
+    // =========================
+    // READ EXCEL
+    // =========================
     const buffer = Buffer.from(await file.arrayBuffer())
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' })
 
-    if (rows.length === 0) {
-      return NextResponse.json({ success: false, message: 'Empty file' })
+    if (!rows.length) {
+      return NextResponse.json({
+        success: false,
+        message: 'Empty file',
+      })
     }
 
-    // 🟢 GET SCHEMA
+    // =========================
+    // SCHEMA
+    // =========================
     const { data: schema } = await supabase
       .from('dynamic_schemas')
       .select('*')
       .eq('scheme_id', schemeId)
 
-    const { data: validationRules } = await supabase
-  .from('validation_rules')
-  .select('*')
-  .eq('scheme_id', schemeId)
-
-    if (!schema || schema.length === 0) {
-      return NextResponse.json({ success: false, message: 'Schema missing' })
-    }
-
-    const schemaColumns = schema.map((s: any) => s.column_name)
-
-    // 🟢 COLUMN MATCH
-    const excelColumns = Object.keys(rows[0])
-
-    const isMatch =
-      excelColumns.length === schemaColumns.length &&
-      excelColumns.every((col, i) => col === schemaColumns[i])
-
-    if (!isMatch) {
+    if (!schema?.length) {
       return NextResponse.json({
         success: false,
-        message: 'Excel format mismatch. Use template.',
+        message: 'Schema missing',
       })
     }
 
-    // 🟢 TABLE NAME
+    // add system columns
+    const enrichedSchema = [
+      { column_name: 'branch_id', data_type: 'text', is_required: true },
+      { column_name: 'branch_name', data_type: 'text', is_required: true },
+      ...schema,
+    ]
+   
+    // =========================
+    // VALIDATION RULES
+    // =========================
+    const { data: validationRules } = await supabase
+      .from('validation_rules')
+      .select('*')
+      .eq('scheme_id', schemeId)
+
+    const rulesMap: Record<string, any[]> = {}
+
+    for (const r of validationRules || []) {
+      if (!rulesMap[r.column_name]) rulesMap[r.column_name] = []
+      rulesMap[r.column_name].push(r)
+    }
+
+    // =========================
+    // TABLE NAME
+    // =========================
     const { data: scheme } = await supabase
       .from('schemes')
       .select('name')
       .eq('id', schemeId)
       .single()
 
-    if (!scheme) {
-      return NextResponse.json({ success: false, message: 'Scheme missing' }, { status: 404 })
-    }
-
-    const tableName = scheme.name
+    const tableName = scheme!.name
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '')
       .replace(/\s+/g, '_')
 
-    // 🟢 BRANCH + MODULE
-    const { data: branch } = await supabase
-      .from('branches')
-      .select('name, code')
-      .eq('id', branchId)
-      .single()
+    // =========================
+    // PROCESS ROWS
+    // =========================
+    const validData: any[] = []
+    const errors: any[] = []
 
-    const { data: module } = await supabase
-      .from('modules')
-      .select('name')
-      .eq('id', moduleId)
-      .single()
-
-    const branchName = branch?.name || ''
-    const branchCode = branch?.code || ''
-    const moduleName = module?.name || ''
-
-    // 🟢 PROCESS DATA
     let successRows = 0
     let failedRows = 0
-    const errors: any[] = []
-    const validData: any[] = []
+    let uploadedBranchId = ''
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
+
+      const branchCode = row.branch_id
+      uploadedBranchId = branchCode
+      const branchName = row.branch_name
+
+      // =========================
+      // VALIDATE BRANCH
+      // =========================
+      const { data: branch } = await supabase
+        .from('branches')
+        .select('code, name')
+        .eq('code', branchCode)
+        .eq('name', branchName)
+        .single()
+
+      if (!branch) {
+        errors.push({
+          row_number: i + 2,
+          column_name: 'branch_id',
+          error_message: 'Invalid branch code or name',
+        })
+        failedRows++
+        continue
+      }
+
+      const cleanRow: any = {
+        branch_id: branchCode,
+        branch_name: branchName,
+      }
+
       let isValid = true
 
-      const cleanRow: any = {}
+      // =========================
+      // FIELD VALIDATION
+      // =========================
+      for (const col of enrichedSchema) {
+        const key = col.column_name
 
-      for (const col of schema) {
-        let value = row[col.column_name]
+        if (['branch_id', 'branch_name'].includes(key)) continue
+
+        let value = row[key]
+        
 
         // EMPTY → NULL
         if (value === '' || value === null || value === undefined) {
@@ -139,32 +179,65 @@ export async function POST(request: Request) {
         if (typeof value === 'string') value = value.trim()
 
         // DATE
-        if (col.data_type === 'date') {
-          if (!isNaN(value)) {
-            const num = Number(value)
+         // DATE
+          if (col.data_type === 'date') {
 
-            if (num > 10000 && num < 60000) {
-              const date = new Date((num - 25569) * 86400 * 1000)
-              value = date.toISOString().split('T')[0]
-              cleanRow[col.column_name] = value
-              continue
-            }
-          }
+                // EXCEL SERIAL DATE
+                if (!isNaN(value)) {
 
-          const parsed = Date.parse(value)
+                  const num = Number(value)
 
-          if (isNaN(parsed)) {
-            isValid = false
-            errors.push({
-              row_number: i + 2,
-              column_name: col.column_name,
-              error_message: 'Invalid date',
-            })
-            continue
-          }
+                  if (num > 10000 && num < 60000) {
 
-          value = new Date(parsed).toISOString().split('T')[0]
-        }
+                    const excelDate = new Date(
+                      (num - 25569) * 86400 * 1000
+                    )
+
+                    const yyyy = excelDate.getUTCFullYear()
+                    const mm = String(
+                      excelDate.getUTCMonth() + 1
+                    ).padStart(2, '0')
+
+                    const dd = String(
+                      excelDate.getUTCDate()
+                    ).padStart(2, '0')
+
+                    value = `${yyyy}-${mm}-${dd}`
+
+                    cleanRow[col.column_name] = value
+
+                    continue
+                  }
+                }
+
+                // NORMAL DATE STRING
+                const parsed = new Date(value)
+
+                if (isNaN(parsed.getTime())) {
+
+                  isValid = false
+
+                  errors.push({
+                    row_number: i + 2,
+                    column_name: col.column_name,
+                    error_message: 'Invalid date',
+                  })
+
+                  continue
+                }
+
+                const yyyy = parsed.getFullYear()
+
+                const mm = String(
+                  parsed.getMonth() + 1
+                ).padStart(2, '0')
+
+                const dd = String(
+                  parsed.getDate()
+                ).padStart(2, '0')
+
+                value = `${yyyy}-${mm}-${dd}`
+              }
 
         // NUMBER
         if (col.data_type === 'number') {
@@ -184,7 +257,7 @@ export async function POST(request: Request) {
         cleanRow[col.column_name] = value
         const rules =
   validationRules?.filter(
-    (r) => r.column_name === col.column_name
+    (r: any) => r.column_name === col.column_name
   ) || []
 
 for (const rule of rules) {
@@ -306,20 +379,16 @@ if (rule.rule_type === 'length') {
       }
 
       if (isValid) {
-        validData.push({
-          ...cleanRow,
-          branch_id: branchId,
-          branch_name: branchName,
-          branch_code: branchCode,
-          module_id: moduleId,
-          module_name: moduleName,
-        })
+        validData.push(cleanRow)
         successRows++
       } else {
         failedRows++
       }
     }
 
+    // =========================
+    // INSERT MAIN DATA
+    // =========================
     // 🟢 INSERT DATA
     if (validData.length > 0) {
       const { error: insertError } = await supabase
@@ -346,70 +415,70 @@ if (rule.rule_type === 'length') {
      .single()
 
    console.log(dbUser?.id)
-
-    // 🟢 SAVE UPLOAD
+    // =========================
+    // INSERT UPLOAD LOG
+    // =========================
     const { data: uploadRecord, error: uploadError } = await supabase
-      .from('uploads')
-      .insert([
-        {
-          user_id: dbUser?.id || user.id,
-          username: dbUser?.username || 'admin',
-          branch_id: branchId,
-          module_id: moduleId,
-          scheme_id: schemeId,
-          file_name: file.name,
-          file_size: file.size,
-          total_rows: rows.length,
-          success_rows: successRows,
-          failed_rows: failedRows,
-          status,
-        },
-      ])
-      .select()
-      .single()
-
-      console.log('UPLOAD ERROR:', uploadError)
-    // 🟢 SAVE ERRORS
-    if (errors.length > 0 && uploadRecord) {
-      const errorData = errors.map((e) => ({
-        upload_id: uploadRecord.id,
-        row_number: e.row_number,
-        column_name: e.column_name,
-        error_message: e.error_message,
-      }))
-
-      await supabase.from('upload_errors').insert(errorData)
-    }
-
-    // 🟢 ERROR EXCEL
-    let errorFile = null
-
-    if (errors.length > 0) {
-      const ws = XLSX.utils.json_to_sheet(errors)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Errors')
-
-      const buffer = XLSX.write(wb, {
-        type: 'buffer',
-        bookType: 'xlsx',
-      })
-
-      errorFile = buffer.toString('base64')
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        totalRows: rows.length,
-        successRows,
-        failedRows,
-        status,
-      },
-      errorFile,
-    })
-  } catch (err) {
-    console.error(err)
-
+          .from('uploads')
+          .insert([
+            {
+              user_id: dbUser?.id || user.id,
+              username: dbUser?.username || 'admin',
+              branch_id: uploadedBranchId,
+              module_id: moduleId,
+              scheme_id: schemeId,
+              file_name: file.name,
+              file_size: file.size,
+              total_rows: rows.length,
+              success_rows: successRows,
+              failed_rows: failedRows,
+              status,
+            },
+          ])
+          .select()
+          .single()
+    
+          console.log('UPLOAD ERROR:', uploadError)
+        // 🟢 SAVE ERRORS
+        if (errors.length > 0 && uploadRecord) {
+          const errorData = errors.map((e) => ({
+            upload_id: uploadRecord.id,
+            row_number: e.row_number,
+            column_name: e.column_name,
+            error_message: e.error_message,
+          }))
+    
+          await supabase.from('upload_errors').insert(errorData)
+        }
+    
+        // 🟢 ERROR EXCEL
+        let errorFile = null
+    
+        if (errors.length > 0) {
+          const ws = XLSX.utils.json_to_sheet(errors)
+          const wb = XLSX.utils.book_new()
+          XLSX.utils.book_append_sheet(wb, ws, 'Errors')
+    
+          const buffer = XLSX.write(wb, {
+            type: 'buffer',
+            bookType: 'xlsx',
+          })
+    
+          errorFile = buffer.toString('base64')
+        }
+    
+        return NextResponse.json({
+          success: true,
+          data: {
+            totalRows: rows.length,
+            successRows,
+            failedRows,
+            status,
+          },
+          errorFile,
+        })
+      } catch (err) {
+        console.error(err)
     return NextResponse.json({
       success: false,
       message: 'Internal server error',

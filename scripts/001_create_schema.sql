@@ -199,3 +199,12 @@ CREATE INDEX idx_upload_errors_upload_id ON public.upload_errors(upload_id);
 CREATE INDEX idx_upload_errors_created_at ON public.upload_errors(created_at DESC);
 CREATE INDEX idx_column_mappings_scheme_id ON public.column_mappings(scheme_id);
 CREATE INDEX idx_validation_rules_scheme_id ON public.validation_rules(scheme_id);
+
+CREATE TABLE queries (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  query TEXT NOT NULL,
+  description TEXT,
+  variables JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
